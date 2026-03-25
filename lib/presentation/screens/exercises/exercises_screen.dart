@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/database/app_database.dart';
 import '../../../models/enums.dart';
+import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -57,6 +60,34 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     _searchController.clear();
   }
 
+  void _showCreateExerciseSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _CreateExerciseSheet(
+        onSave: (companion) async {
+          final repo = ref.read(exerciseRepositoryProvider);
+          await repo.insertExercise(companion);
+          ref.invalidate(filteredExercisesProvider);
+          if (context.mounted) {
+            Navigator.of(context).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Exercise created!'),
+                backgroundColor: AppColors.primary,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(exerciseSearchQueryProvider);
@@ -85,6 +116,12 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     }
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.onPrimary,
+        onPressed: () => _showCreateExerciseSheet(context),
+        child: const Icon(Icons.add),
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1338,6 +1375,353 @@ class _PlaceholderTab extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Create Exercise Bottom Sheet
+// ---------------------------------------------------------------------------
+
+class _CreateExerciseSheet extends StatefulWidget {
+  const _CreateExerciseSheet({required this.onSave});
+  final Future<void> Function(ExercisesCompanion companion) onSave;
+
+  @override
+  State<_CreateExerciseSheet> createState() => _CreateExerciseSheetState();
+}
+
+class _CreateExerciseSheetState extends State<_CreateExerciseSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _instructionsController = TextEditingController();
+
+  CategoryType _category = CategoryType.strength;
+  LevelType _level = LevelType.beginner;
+  List<Muscle> _primaryMuscles = [];
+  EquipmentType? _equipment;
+  ForceType? _force;
+  MechanicType? _mechanic;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_primaryMuscles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one primary muscle'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+
+    final instructions = _instructionsController.text.trim();
+    final companion = ExercisesCompanion.insert(
+      id: const Uuid().v4(),
+      name: _nameController.text.trim(),
+      aliases: [],
+      primaryMuscles: _primaryMuscles,
+      secondaryMuscles: [],
+      force: drift.Value(_force),
+      level: _level,
+      mechanic: drift.Value(_mechanic),
+      equipment: drift.Value(_equipment),
+      category: _category,
+      instructions: instructions.isNotEmpty ? instructions.split('\n') : [],
+      description: const drift.Value(null),
+      tips: [],
+      image: const drift.Value(null),
+    );
+
+    try {
+      await widget.onSave(companion);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title
+              const Text(
+                'Create Exercise',
+                style: TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Scrollable form fields
+              Flexible(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  shrinkWrap: true,
+                  children: [
+                    // Name
+                    _buildLabel('Name *'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _nameController,
+                      style: const TextStyle(color: AppColors.textPrimaryDark),
+                      decoration: _inputDecoration('Exercise name'),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Category
+                    _buildLabel('Category'),
+                    const SizedBox(height: 6),
+                    _buildDropdown<CategoryType>(
+                      value: _category,
+                      items: CategoryType.values,
+                      label: (e) => e.displayName,
+                      onChanged: (v) => setState(() => _category = v!),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Level
+                    _buildLabel('Level'),
+                    const SizedBox(height: 6),
+                    _buildDropdown<LevelType>(
+                      value: _level,
+                      items: LevelType.values,
+                      label: (e) => e.displayName,
+                      onChanged: (v) => setState(() => _level = v!),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Primary Muscles (multi-select chips)
+                    _buildLabel('Primary Muscles *'),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: Muscle.values.map((m) {
+                        final selected = _primaryMuscles.contains(m);
+                        return FilterChip(
+                          label: Text(
+                            m.displayName,
+                            style: TextStyle(
+                              color: selected
+                                  ? AppColors.onPrimary
+                                  : AppColors.textSecondaryDark,
+                              fontSize: 13,
+                            ),
+                          ),
+                          selected: selected,
+                          selectedColor: AppColors.primary,
+                          backgroundColor: AppColors.surfaceVariantDark,
+                          checkmarkColor: AppColors.onPrimary,
+                          side: BorderSide.none,
+                          onSelected: (val) {
+                            setState(() {
+                              if (val) {
+                                _primaryMuscles = [..._primaryMuscles, m];
+                              } else {
+                                _primaryMuscles =
+                                    _primaryMuscles.where((e) => e != m).toList();
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Equipment
+                    _buildLabel('Equipment'),
+                    const SizedBox(height: 6),
+                    _buildNullableDropdown<EquipmentType>(
+                      value: _equipment,
+                      items: EquipmentType.values,
+                      label: (e) => e.displayName,
+                      onChanged: (v) => setState(() => _equipment = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Force
+                    _buildLabel('Force'),
+                    const SizedBox(height: 6),
+                    _buildNullableDropdown<ForceType>(
+                      value: _force,
+                      items: ForceType.values,
+                      label: (e) => e.displayName,
+                      onChanged: (v) => setState(() => _force = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Mechanic
+                    _buildLabel('Mechanic'),
+                    const SizedBox(height: 6),
+                    _buildNullableDropdown<MechanicType>(
+                      value: _mechanic,
+                      items: MechanicType.values,
+                      label: (e) => e.displayName,
+                      onChanged: (v) => setState(() => _mechanic = v),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Instructions
+                    _buildLabel('Instructions'),
+                    const SizedBox(height: 6),
+                    TextFormField(
+                      controller: _instructionsController,
+                      style: const TextStyle(color: AppColors.textPrimaryDark),
+                      maxLines: 4,
+                      decoration: _inputDecoration('One instruction per line'),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+
+              // Save button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _saving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.onPrimary,
+                            ),
+                          )
+                        : const Text(
+                            'Save Exercise',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.textSecondaryDark,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textMutedDark),
+      filled: true,
+      fillColor: AppColors.surfaceVariantDark,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    );
+  }
+
+  Widget _buildDropdown<T>({
+    required T value,
+    required List<T> items,
+    required String Function(T) label,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      dropdownColor: AppColors.surfaceVariantDark,
+      style: const TextStyle(color: AppColors.textPrimaryDark),
+      decoration: _inputDecoration(''),
+      items: items
+          .map((e) => DropdownMenuItem(value: e, child: Text(label(e))))
+          .toList(),
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _buildNullableDropdown<T>({
+    required T? value,
+    required List<T> items,
+    required String Function(T) label,
+    required ValueChanged<T?> onChanged,
+  }) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      dropdownColor: AppColors.surfaceVariantDark,
+      style: const TextStyle(color: AppColors.textPrimaryDark),
+      decoration: _inputDecoration(''),
+      items: [
+        DropdownMenuItem<T>(value: null, child: Text('None')),
+        ...items.map((e) => DropdownMenuItem(value: e, child: Text(label(e)))),
+      ],
+      onChanged: onChanged,
     );
   }
 }
