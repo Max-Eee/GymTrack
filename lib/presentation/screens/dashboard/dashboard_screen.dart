@@ -47,6 +47,7 @@ class DashboardScreen extends ConsumerWidget {
             ref.invalidate(allPersonalBestsProvider);
             ref.invalidate(allWorkoutPlansProvider);
             ref.invalidate(allExercisesProvider);
+            ref.invalidate(totalVolumeProvider(weekDateRange));
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -75,10 +76,16 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // ── Quick actions (2×2 grid) ──────────────────────
-                _buildSectionHeading('Quick Actions'),
+                // ── Insights section ─────────────────────────────
+                _buildSectionHeading('Insights'),
                 const SizedBox(height: 12),
-                _buildQuickActions(ref),
+                _WeeklyBarChart(workoutsPerDay: _getWeeklyWorkoutData(workoutLogs.valueOrNull)),
+                const SizedBox(height: 12),
+                _WeeklyStatsCard(
+                  weeklyWorkouts: weeklyWorkouts,
+                  weeklyPRs: weeklyPRs,
+                  totalVolume: ref.watch(totalVolumeProvider(weekDateRange)),
+                ),
                 const SizedBox(height: 24),
 
                 // ── Goals section ─────────────────────────────────
@@ -187,56 +194,6 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // ── Quick action cards ──────────────────────────────────────────────────
-  Widget _buildQuickActions(WidgetRef ref) {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.search_rounded,
-                title: 'Browse Exercises',
-                subtitle: 'Find exercises',
-                onTap: () => ref.read(currentTabProvider.notifier).state = 1,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.add_circle_outline_rounded,
-                title: 'Create Routine',
-                subtitle: 'Build a plan',
-                onTap: () => ref.read(currentTabProvider.notifier).state = 2,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.play_arrow_rounded,
-                title: 'Start Workout',
-                subtitle: 'Begin training',
-                onTap: () => ref.read(currentTabProvider.notifier).state = 2,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _QuickActionCard(
-                icon: Icons.show_chart_rounded,
-                title: 'View Activity',
-                subtitle: 'Track progress',
-                onTap: () => ref.read(currentTabProvider.notifier).state = 3,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
 
   // ── Goals section ───────────────────────────────────────────────────────
   Widget _buildGoals({
@@ -259,16 +216,11 @@ class DashboardScreen extends ConsumerWidget {
                 subtitle: 'Tap below to set your first goal',
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _AddGoalCard(
-                      onTap: () => _showAddGoalSheet(context),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(child: SizedBox()),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: _AddGoalCard(
+                  onTap: () => _showAddGoalSheet(context),
+                ),
               ),
             ],
           );
@@ -311,38 +263,22 @@ class DashboardScreen extends ConsumerWidget {
                 ),
               ),
             );
-          } else if (displayGoals.length < 4) {
-            row.add(const SizedBox(width: 12));
-            row.add(Expanded(
-              child: _AddGoalCard(
-                onTap: () => _showAddGoalSheet(context),
-              ),
-            ));
           } else {
             row.add(const SizedBox(width: 12));
             row.add(const Expanded(child: SizedBox()));
           }
           cards.add(Row(children: row));
-          if (i + 2 < displayGoals.length ||
-              (i + 1 >= displayGoals.length && displayGoals.length < 4)) {
-            // gap already handled
-          }
         }
 
-        // If even number of goals and < 4, add another row with add card
-        if (displayGoals.length % 2 == 0 && displayGoals.length < 4) {
+        // Add Goal card always full-width below the grid
+        if (displayGoals.length < 4) {
           cards.add(const SizedBox(height: 12));
           cards.add(
-            Row(
-              children: [
-                Expanded(
-                  child: _AddGoalCard(
-                    onTap: () => _showAddGoalSheet(context),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: SizedBox()),
-              ],
+            SizedBox(
+              width: double.infinity,
+              child: _AddGoalCard(
+                onTap: () => _showAddGoalSheet(context),
+              ),
             ),
           );
         }
@@ -539,91 +475,6 @@ class _StatCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// _QuickActionCard
-// ═══════════════════════════════════════════════════════════════════════════
-class _QuickActionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
-
-  const _QuickActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.surfaceDark,
-                AppColors.surfaceVariantDark.withOpacity(0.6),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderDark, width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(icon, color: AppColors.primary, size: 22),
-                  ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textMutedDark,
-                    size: 20,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimaryDark,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // _GoalCard
 // ═══════════════════════════════════════════════════════════════════════════
 class _GoalCard extends ConsumerWidget {
@@ -794,28 +645,18 @@ class _AddGoalCard extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppColors.borderDark,
-            width: 1,
-            style: BorderStyle.solid,
+            color: AppColors.primary.withOpacity(0.3),
+            width: 1.5,
           ),
         ),
-        child: const Column(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.add_circle_outline_rounded,
-              color: AppColors.textMutedDark,
-              size: 28,
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Add Goal',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textMutedDark,
-              ),
-            ),
+            Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 24),
+            SizedBox(width: 10),
+            Text('Add Goal', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.primary)),
+            SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, color: AppColors.primary, size: 20),
           ],
         ),
       ),
@@ -1411,6 +1252,179 @@ class _ShimmerBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surfaceVariantDark.withOpacity(0.5),
         borderRadius: BorderRadius.circular(6),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Helper: weekly workout data for bar chart
+// ═══════════════════════════════════════════════════════════════════════════
+List<int> _getWeeklyWorkoutData(List<WorkoutLogData>? logs) {
+  final now = DateTime.now();
+  final monday = DateTime(now.year, now.month, now.day)
+      .subtract(Duration(days: now.weekday - 1));
+
+  final counts = List.filled(7, 0); // Mon-Sun
+  if (logs == null) return counts;
+
+  for (final log in logs) {
+    if (log.inProgress) continue;
+    final logDay = DateTime(log.date.year, log.date.month, log.date.day);
+    final daysSinceMonday = logDay.difference(monday).inDays;
+    if (daysSinceMonday >= 0 && daysSinceMonday < 7) {
+      counts[daysSinceMonday]++;
+    }
+  }
+  return counts;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _WeeklyBarChart
+// ═══════════════════════════════════════════════════════════════════════════
+class _WeeklyBarChart extends StatelessWidget {
+  final List<int> workoutsPerDay;
+
+  const _WeeklyBarChart({required this.workoutsPerDay});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxVal = workoutsPerDay.reduce((a, b) => a > b ? a : b).clamp(1, 100);
+    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bar_chart_rounded, color: AppColors.danger, size: 20),
+              const SizedBox(width: 8),
+              const Text('WEEKLY ACTIVITY', style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600,
+                letterSpacing: 1.0, color: AppColors.textSecondaryDark,
+              )),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 120,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(7, (i) {
+                final val = workoutsPerDay[i];
+                final barHeight = val > 0 ? (val / maxVal * 80).clamp(8.0, 80.0) : 4.0;
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (val > 0)
+                      Text('$val', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: 32,
+                      height: barHeight,
+                      decoration: BoxDecoration(
+                        color: val > 0 ? AppColors.primary : AppColors.surfaceVariantDark,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(days[i], style: TextStyle(
+                      color: val > 0 ? AppColors.textPrimaryDark : AppColors.textMutedDark,
+                      fontSize: 12, fontWeight: FontWeight.w500,
+                    )),
+                  ],
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _WeeklyStatsCard
+// ═══════════════════════════════════════════════════════════════════════════
+class _WeeklyStatsCard extends StatelessWidget {
+  final AsyncValue<int> weeklyWorkouts;
+  final AsyncValue<int> weeklyPRs;
+  final AsyncValue<double> totalVolume;
+
+  const _WeeklyStatsCard({
+    required this.weeklyWorkouts,
+    required this.weeklyPRs,
+    required this.totalVolume,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final volumeVal = totalVolume.valueOrNull ?? 0.0;
+    final workoutsVal = weeklyWorkouts.valueOrNull ?? 0;
+    final prsVal = weeklyPRs.valueOrNull ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderDark),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_rounded, color: AppColors.danger, size: 20),
+              const SizedBox(width: 8),
+              const Text('THIS WEEK', style: TextStyle(
+                fontSize: 12, fontWeight: FontWeight.w600,
+                letterSpacing: 1.0, color: AppColors.textSecondaryDark,
+              )),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _miniStat('Workouts', '$workoutsVal', Icons.fitness_center_rounded)),
+              const SizedBox(width: 12),
+              Expanded(child: _miniStat('Volume', '${(volumeVal / 1000).toStringAsFixed(1)}k kg', Icons.monitor_weight_rounded)),
+              const SizedBox(width: 12),
+              Expanded(child: _miniStat('PRs', '$prsVal', Icons.emoji_events_rounded)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _miniStat(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceVariantDark.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 20),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(
+            color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w700,
+          )),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(
+            color: AppColors.textSecondaryDark, fontSize: 11,
+          )),
+        ],
       ),
     );
   }
