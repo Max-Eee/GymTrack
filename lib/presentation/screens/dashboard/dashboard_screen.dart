@@ -11,7 +11,7 @@ import '../../providers/user_providers.dart';
 import '../../../data/database/app_database.dart';
 
 // ---------------------------------------------------------------------------
-// Dashboard Screen - matches the FitForge web app design
+// Dashboard Screen - matches the GymTrack app design
 // ---------------------------------------------------------------------------
 
 class DashboardScreen extends ConsumerWidget {
@@ -48,6 +48,7 @@ class DashboardScreen extends ConsumerWidget {
             ref.invalidate(allWorkoutPlansProvider);
             ref.invalidate(allExercisesProvider);
             ref.invalidate(totalVolumeProvider(weekDateRange));
+            ref.invalidate(weeklyMuscleActivityProvider(weekDateRange));
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -76,15 +77,11 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
-                // ── Insights section ─────────────────────────────
-                _buildSectionHeading('Insights'),
+                // ── Muscle Activity Heat Map ──────────────────────
+                _buildSectionHeading('Muscle Activity'),
                 const SizedBox(height: 12),
-                _WeeklyBarChart(workoutsPerDay: _getWeeklyWorkoutData(workoutLogs.valueOrNull)),
-                const SizedBox(height: 12),
-                _WeeklyStatsCard(
-                  weeklyWorkouts: weeklyWorkouts,
-                  weeklyPRs: weeklyPRs,
-                  totalVolume: ref.watch(totalVolumeProvider(weekDateRange)),
+                _MuscleHeatMap(
+                  muscleData: ref.watch(weeklyMuscleActivityProvider(weekDateRange)),
                 ),
                 const SizedBox(height: 24),
 
@@ -1258,176 +1255,376 @@ class _ShimmerBlock extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Helper: weekly workout data for bar chart
+// _MuscleHeatMap — body silhouette with muscle group highlights
 // ═══════════════════════════════════════════════════════════════════════════
-List<int> _getWeeklyWorkoutData(List<WorkoutLogData>? logs) {
-  final now = DateTime.now();
-  final monday = DateTime(now.year, now.month, now.day)
-      .subtract(Duration(days: now.weekday - 1));
+class _MuscleHeatMap extends StatefulWidget {
+  final AsyncValue<Map<Muscle, int>> muscleData;
+  const _MuscleHeatMap({required this.muscleData});
 
-  final counts = List.filled(7, 0); // Mon-Sun
-  if (logs == null) return counts;
-
-  for (final log in logs) {
-    if (log.inProgress) continue;
-    final logDay = DateTime(log.date.year, log.date.month, log.date.day);
-    final daysSinceMonday = logDay.difference(monday).inDays;
-    if (daysSinceMonday >= 0 && daysSinceMonday < 7) {
-      counts[daysSinceMonday]++;
-    }
-  }
-  return counts;
+  @override
+  State<_MuscleHeatMap> createState() => _MuscleHeatMapState();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// _WeeklyBarChart
-// ═══════════════════════════════════════════════════════════════════════════
-class _WeeklyBarChart extends StatelessWidget {
-  final List<int> workoutsPerDay;
-
-  const _WeeklyBarChart({required this.workoutsPerDay});
+class _MuscleHeatMapState extends State<_MuscleHeatMap> {
+  bool _showFront = true;
 
   @override
   Widget build(BuildContext context) {
-    final maxVal = workoutsPerDay.reduce((a, b) => a > b ? a : b).clamp(1, 100);
-    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surfaceDark,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.borderDark),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with toggle
           Row(
             children: [
-              const Icon(Icons.bar_chart_rounded, color: AppColors.danger, size: 20),
+              Icon(Icons.accessibility_new_rounded,
+                  color: AppColors.primary, size: 20),
               const SizedBox(width: 8),
-              const Text('WEEKLY ACTIVITY', style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600,
-                letterSpacing: 1.0, color: AppColors.textSecondaryDark,
-              )),
+              const Text(
+                'THIS WEEK',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.0,
+                  color: AppColors.textSecondaryDark,
+                ),
+              ),
+              const Spacer(),
+              _viewToggle(),
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            height: 120,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(7, (i) {
-                final val = workoutsPerDay[i];
-                final barHeight = val > 0 ? (val / maxVal * 80).clamp(8.0, 80.0) : 4.0;
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    if (val > 0)
-                      Text('$val', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    Container(
-                      width: 32,
-                      height: barHeight,
-                      decoration: BoxDecoration(
-                        color: val > 0 ? AppColors.primary : AppColors.surfaceVariantDark,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(days[i], style: TextStyle(
-                      color: val > 0 ? AppColors.textPrimaryDark : AppColors.textMutedDark,
-                      fontSize: 12, fontWeight: FontWeight.w500,
-                    )),
-                  ],
-                );
-              }),
+
+          // Body silhouette
+          widget.muscleData.when(
+            data: (data) => _buildBody(data),
+            loading: () => SizedBox(
+              height: 280,
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: AppColors.primary,
+                  strokeWidth: 2,
+                ),
+              ),
+            ),
+            error: (_, __) => SizedBox(
+              height: 280,
+              child: Center(
+                child: Text('Unable to load data',
+                    style: TextStyle(color: AppColors.textMutedDark)),
+              ),
             ),
           ),
+
+          const SizedBox(height: 16),
+          // Legend
+          _buildLegend(),
         ],
       ),
     );
+  }
+
+  Widget _viewToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.backgroundDark,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _toggleBtn('Front', _showFront),
+          _toggleBtn('Back', !_showFront),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleBtn(String label, bool active) {
+    return GestureDetector(
+      onTap: () => setState(() => _showFront = label == 'Front'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? AppColors.primary : AppColors.textMutedDark,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(Map<Muscle, int> data) {
+    final maxVal = data.values.isEmpty ? 1 : data.values.reduce((a, b) => a > b ? a : b).clamp(1, 999);
+
+    final muscles = _showFront
+        ? _frontMuscles
+        : _backMuscles;
+
+    return SizedBox(
+      height: 340,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Body outline
+          CustomPaint(
+            size: const Size(180, 340),
+            painter: _BodyOutlinePainter(isFront: _showFront),
+          ),
+          // Muscle regions
+          ...muscles.entries.map((entry) {
+            final muscle = entry.key;
+            final region = entry.value;
+            final count = data[muscle] ?? 0;
+            final intensity = count > 0 ? (count / maxVal).clamp(0.15, 1.0) : 0.0;
+
+            return Positioned(
+              left: region.x,
+              top: region.y,
+              child: GestureDetector(
+                onTap: () => _showMuscleTooltip(context, muscle, count),
+                child: Container(
+                  width: region.w,
+                  height: region.h,
+                  decoration: BoxDecoration(
+                    color: intensity > 0
+                        ? AppColors.primary.withOpacity(intensity * 0.85)
+                        : AppColors.surfaceVariantDark.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(region.radius),
+                  ),
+                ),
+              ),
+            );
+          }),
+          // Muscle labels for active muscles
+          ...muscles.entries.where((e) => (data[e.key] ?? 0) > 0).map((entry) {
+            final region = entry.value;
+            return Positioned(
+              left: region.labelX,
+              top: region.labelY,
+              child: Text(
+                _muscleName(entry.key),
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onPrimary,
+                  shadows: [
+                    Shadow(color: Colors.black.withOpacity(0.8), blurRadius: 2),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  void _showMuscleTooltip(BuildContext context, Muscle muscle, int count) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${_muscleName(muscle)}: ${count > 0 ? "$count hits this week" : "Not trained this week"}',
+          style: const TextStyle(color: AppColors.textPrimaryDark),
+        ),
+        backgroundColor: AppColors.surfaceDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildLegend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text('Rest', style: TextStyle(fontSize: 10, color: AppColors.textMutedDark)),
+        const SizedBox(width: 8),
+        Container(
+          width: 120,
+          height: 8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            gradient: LinearGradient(
+              colors: [
+                AppColors.surfaceVariantDark.withOpacity(0.3),
+                AppColors.primary.withOpacity(0.3),
+                AppColors.primary.withOpacity(0.6),
+                AppColors.primary,
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Text('Active', style: TextStyle(fontSize: 10, color: AppColors.primary)),
+      ],
+    );
+  }
+
+  String _muscleName(Muscle m) {
+    switch (m) {
+      case Muscle.abdominals: return 'Abs';
+      case Muscle.hamstrings: return 'Hams';
+      case Muscle.adductors: return 'Adductors';
+      case Muscle.quadriceps: return 'Quads';
+      case Muscle.biceps: return 'Biceps';
+      case Muscle.shoulders: return 'Shoulders';
+      case Muscle.chest: return 'Chest';
+      case Muscle.middleBack: return 'Mid Back';
+      case Muscle.calves: return 'Calves';
+      case Muscle.glutes: return 'Glutes';
+      case Muscle.lowerBack: return 'Low Back';
+      case Muscle.lats: return 'Lats';
+      case Muscle.triceps: return 'Triceps';
+      case Muscle.traps: return 'Traps';
+      case Muscle.forearms: return 'Forearms';
+      case Muscle.neck: return 'Neck';
+      case Muscle.abductors: return 'Abductors';
+    }
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// _WeeklyStatsCard
-// ═══════════════════════════════════════════════════════════════════════════
-class _WeeklyStatsCard extends StatelessWidget {
-  final AsyncValue<int> weeklyWorkouts;
-  final AsyncValue<int> weeklyPRs;
-  final AsyncValue<double> totalVolume;
+// Muscle region positioning data
+class _MuscleRegion {
+  final double x, y, w, h, radius, labelX, labelY;
+  const _MuscleRegion(this.x, this.y, this.w, this.h, this.radius, this.labelX, this.labelY);
+}
 
-  const _WeeklyStatsCard({
-    required this.weeklyWorkouts,
-    required this.weeklyPRs,
-    required this.totalVolume,
-  });
+// Center of canvas = x:90 (half of 180 width)
+// Positions calibrated for 180×340 body proportions
+
+const _frontMuscles = <Muscle, _MuscleRegion>{
+  // Head area offset: body centered at x~98 in a 180-wide space, y starts ~0
+  Muscle.neck:       _MuscleRegion(82, 52, 16, 14, 4, 84, 54),
+  Muscle.shoulders:  _MuscleRegion(54, 68, 72, 16, 6, 62, 70),
+  Muscle.chest:      _MuscleRegion(62, 86, 56, 28, 8, 76, 94),
+  Muscle.biceps:     _MuscleRegion(48, 100, 14, 32, 6, 49, 112),
+  Muscle.triceps:    _MuscleRegion(118, 100, 14, 32, 6, 119, 112),
+  Muscle.forearms:   _MuscleRegion(42, 138, 12, 30, 5, 43, 148),
+  Muscle.abdominals: _MuscleRegion(70, 118, 40, 40, 6, 78, 132),
+  Muscle.quadriceps: _MuscleRegion(64, 190, 52, 54, 8, 76, 210),
+  Muscle.adductors:  _MuscleRegion(78, 178, 24, 30, 6, 80, 188),
+  Muscle.abductors:  _MuscleRegion(62, 168, 56, 18, 6, 72, 172),
+  Muscle.calves:     _MuscleRegion(66, 260, 48, 40, 8, 78, 274),
+};
+
+const _backMuscles = <Muscle, _MuscleRegion>{
+  Muscle.neck:       _MuscleRegion(82, 52, 16, 14, 4, 84, 54),
+  Muscle.traps:      _MuscleRegion(64, 64, 52, 22, 6, 78, 70),
+  Muscle.shoulders:  _MuscleRegion(54, 68, 72, 16, 6, 62, 70),
+  Muscle.lats:       _MuscleRegion(58, 90, 64, 34, 8, 76, 100),
+  Muscle.middleBack: _MuscleRegion(70, 100, 40, 22, 6, 76, 106),
+  Muscle.lowerBack:  _MuscleRegion(74, 126, 32, 24, 6, 78, 132),
+  Muscle.triceps:    _MuscleRegion(48, 100, 14, 32, 6, 49, 112),
+  Muscle.forearms:   _MuscleRegion(118, 138, 12, 30, 5, 119, 148),
+  Muscle.glutes:     _MuscleRegion(66, 156, 48, 30, 8, 78, 166),
+  Muscle.hamstrings: _MuscleRegion(64, 192, 52, 50, 8, 76, 210),
+  Muscle.calves:     _MuscleRegion(66, 260, 48, 40, 8, 78, 274),
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Body Outline Painter — draws a simplified human silhouette
+// ═══════════════════════════════════════════════════════════════════════════
+class _BodyOutlinePainter extends CustomPainter {
+  final bool isFront;
+  _BodyOutlinePainter({required this.isFront});
 
   @override
-  Widget build(BuildContext context) {
-    final volumeVal = totalVolume.valueOrNull ?? 0.0;
-    final workoutsVal = weeklyWorkouts.valueOrNull ?? 0;
-    final prsVal = weeklyPRs.valueOrNull ?? 0;
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.surfaceVariantDark.withOpacity(0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderDark),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.insights_rounded, color: AppColors.danger, size: 20),
-              const SizedBox(width: 8),
-              const Text('THIS WEEK', style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w600,
-                letterSpacing: 1.0, color: AppColors.textSecondaryDark,
-              )),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _miniStat('Workouts', '$workoutsVal', Icons.fitness_center_rounded)),
-              const SizedBox(width: 12),
-              Expanded(child: _miniStat('Volume', '${(volumeVal / 1000).toStringAsFixed(1)}k kg', Icons.monitor_weight_rounded)),
-              const SizedBox(width: 12),
-              Expanded(child: _miniStat('PRs', '$prsVal', Icons.emoji_events_rounded)),
-            ],
-          ),
-        ],
-      ),
+    final cx = size.width / 2;
+
+    // Head
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, 28), width: 30, height: 36),
+      paint,
     );
+
+    // Neck
+    canvas.drawLine(Offset(cx - 6, 46), Offset(cx - 6, 58), paint);
+    canvas.drawLine(Offset(cx + 6, 46), Offset(cx + 6, 58), paint);
+
+    // Shoulders
+    final shoulderPath = Path()
+      ..moveTo(cx - 6, 58)
+      ..lineTo(cx - 40, 72)
+      ..moveTo(cx + 6, 58)
+      ..lineTo(cx + 40, 72);
+    canvas.drawPath(shoulderPath, paint);
+
+    // Torso
+    final torsoPath = Path()
+      ..moveTo(cx - 40, 72)
+      ..lineTo(cx - 36, 160)
+      ..moveTo(cx + 40, 72)
+      ..lineTo(cx + 36, 160);
+    canvas.drawPath(torsoPath, paint);
+
+    // Arms (left)
+    final leftArm = Path()
+      ..moveTo(cx - 40, 72)
+      ..lineTo(cx - 48, 140)
+      ..lineTo(cx - 44, 176);
+    canvas.drawPath(leftArm, paint);
+
+    // Arms (right)
+    final rightArm = Path()
+      ..moveTo(cx + 40, 72)
+      ..lineTo(cx + 48, 140)
+      ..lineTo(cx + 44, 176);
+    canvas.drawPath(rightArm, paint);
+
+    // Hips
+    canvas.drawLine(Offset(cx - 36, 160), Offset(cx, 170), paint);
+    canvas.drawLine(Offset(cx + 36, 160), Offset(cx, 170), paint);
+
+    // Legs (left)
+    final leftLeg = Path()
+      ..moveTo(cx - 30, 164)
+      ..lineTo(cx - 26, 252)
+      ..lineTo(cx - 22, 310)
+      ..lineTo(cx - 30, 326);
+    canvas.drawPath(leftLeg, paint);
+
+    // Legs (right)
+    final rightLeg = Path()
+      ..moveTo(cx + 30, 164)
+      ..lineTo(cx + 26, 252)
+      ..lineTo(cx + 22, 310)
+      ..lineTo(cx + 30, 326);
+    canvas.drawPath(rightLeg, paint);
+
+    // Inner legs
+    canvas.drawLine(Offset(cx - 8, 170), Offset(cx - 10, 252), paint);
+    canvas.drawLine(Offset(cx + 8, 170), Offset(cx + 10, 252), paint);
+
+    // Feet
+    canvas.drawLine(Offset(cx - 30, 326), Offset(cx - 14, 336), paint);
+    canvas.drawLine(Offset(cx + 30, 326), Offset(cx + 14, 336), paint);
   }
 
-  Widget _miniStat(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceVariantDark.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.primary, size: 20),
-          const SizedBox(height: 8),
-          Text(value, style: TextStyle(
-            color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w700,
-          )),
-          const SizedBox(height: 2),
-          Text(label, style: TextStyle(
-            color: AppColors.textSecondaryDark, fontSize: 11,
-          )),
-        ],
-      ),
-    );
-  }
+  @override
+  bool shouldRepaint(covariant _BodyOutlinePainter oldDelegate) =>
+      isFront != oldDelegate.isFront;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

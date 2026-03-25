@@ -8,10 +8,13 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../models/enums.dart';
+import '../../../models/voice_command.dart';
 import '../../../data/database/app_database.dart';
+import '../../../services/voice_command_service.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
 import '../../providers/workout_providers.dart';
+import '../../widgets/voice_confirmation_card.dart';
 
 // ---------------------------------------------------------------------------
 // In-memory models for tracking workout state
@@ -92,6 +95,10 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
 
   static const _uuid = Uuid();
 
+  // Voice assistant state
+  final VoiceCommandService _voiceService = VoiceCommandService();
+  ParsedVoiceAction? _pendingAction;
+
   // -------------------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------------------
@@ -106,6 +113,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   void dispose() {
     _timer?.cancel();
     _restTimer?.cancel();
+    _voiceService.dispose();
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -264,6 +272,82 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     setState(() {
       _exercises[exIdx].sets.removeAt(setIdx);
     });
+  }
+
+  void _confirmRemoveExercise(int exIdx) {
+    // Prevent removing last exercise
+    if (_exercises.length == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot remove the last exercise from workout'),
+          backgroundColor: AppColors.danger,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final exercise = _exercises[exIdx];
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Remove Exercise',
+            style: TextStyle(color: AppColors.textPrimaryDark)),
+        content: Text(
+          'Remove "${exercise.exerciseName}" from this workout?',
+          style: const TextStyle(color: AppColors.textSecondaryDark)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.textSecondaryDark)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _removeExerciseFromWorkout(exIdx);
+            },
+            child: const Text('Remove',
+                style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _removeExerciseFromWorkout(int exIdx) {
+    // Clean up controllers for this exercise's sets
+    final exercise = _exercises[exIdx];
+    for (var i = 0; i < exercise.sets.length; i++) {
+      _controllers.remove('${exIdx}_${i}_w')?.dispose();
+      _controllers.remove('${exIdx}_${i}_r')?.dispose();
+    }
+
+    setState(() {
+      _exercises.removeAt(exIdx);
+    });
+
+    // Re-key controllers for exercises after the removed one
+    final newControllers = <String, TextEditingController>{};
+    for (final entry in _controllers.entries) {
+      final parts = entry.key.split('_');
+      if (parts.length == 3) {
+        final oldExIdx = int.tryParse(parts[0]);
+        if (oldExIdx != null && oldExIdx > exIdx) {
+          newControllers['${oldExIdx - 1}_${parts[1]}_${parts[2]}'] =
+              entry.value;
+        } else {
+          newControllers[entry.key] = entry.value;
+        }
+      } else {
+        newControllers[entry.key] = entry.value;
+      }
+    }
+    _controllers
+      ..clear()
+      ..addAll(newControllers);
   }
 
   bool _areAllSetsCompleted(int exIdx) {
@@ -514,6 +598,306 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
 
   // -------------------------------------------------------------------------
+  // Voice Assistant
+  // -------------------------------------------------------------------------
+
+  Future<void> _startVoiceListening() async {
+    await _voiceService.initialize();
+
+    // Launch native Android speech recognition dialog
+    final text = await _voiceService.recognizeSpeech(
+      prompt: 'Say a workout command',
+    );
+
+    if (text == null || text.trim().isEmpty) {
+      // User cancelled or no speech detected
+      return;
+    }
+
+    if (!mounted) return;
+    await _processVoiceInput(text);
+  }
+
+  Future<void> _processVoiceInput(String text) async {
+
+    VoiceCommand? command;
+
+    // Try Gemini Nano first (smart mode)
+    if (_voiceService.isSmartMode) {
+      final exerciseContext =
+          _exercises.map((e) => e.exerciseName).toList();
+      command = await _voiceService.parseCommandSmart(text, exerciseContext);
+    }
+
+    // Fallback to regex
+    command ??= _voiceService.parseCommand(text);
+
+    if (command == null) {
+      _showVoiceError('Could not understand: "$text"');
+      return;
+    }
+
+    // For remove/complete commands, try matching against current workout exercises first
+    final exercises = await ref.read(allExercisesProvider.future);
+    final action = _voiceService.resolve(command, exercises);
+    if (action == null) {
+      _showVoiceError('Exercise not found: "${command.exerciseName}"');
+      return;
+    }
+
+    setState(() => _pendingAction = action);
+  }
+
+  void _executeVoiceAction(ParsedVoiceAction action) {
+    final cmd = action.command;
+    final exId = action.resolvedExerciseId!;
+    final exName = action.resolvedExerciseName;
+
+    if (cmd is AddExerciseCommand) {
+      _voiceAddExercise(exId, exName, 3, null, null);
+    } else if (cmd is AddSetsCommand) {
+      _voiceAddOrUpdateExercise(
+        exId, exName, cmd.setCount, cmd.weightKg, cmd.reps,
+      );
+    } else if (cmd is UpdateSetCommand) {
+      _voiceUpdateLatestSet(exId, exName, cmd.weightKg, cmd.reps);
+    } else if (cmd is RemoveExerciseCommand) {
+      _voiceRemoveExercise(exId);
+    } else if (cmd is AddSetToExerciseCommand) {
+      _voiceAddSetsToExisting(exId, exName, cmd.setCount, cmd.weightKg, cmd.reps);
+    } else if (cmd is UpdateSpecificSetCommand) {
+      _voiceUpdateSpecificSet(exId, cmd.setIndex, cmd.weightKg, cmd.reps);
+    } else if (cmd is CompleteExerciseCommand) {
+      _voiceCompleteExercise(exId);
+    }
+
+    setState(() => _pendingAction = null);
+  }
+
+  void _voiceAddExercise(
+    String exId, String exName, int setCount, double? kg, int? reps,
+  ) async {
+    final repo = ref.read(workoutRepositoryProvider);
+    final logExId = _uuid.v4();
+    await repo.insertWorkoutLogExercise(
+      WorkoutLogExercisesCompanion.insert(
+        id: logExId,
+        workoutLogId: _workoutLogId!,
+        exerciseId: exId,
+        trackingType: TrackingType.reps,
+      ),
+    );
+
+    final sets = List.generate(setCount, (_) => SetEntry(id: _uuid.v4()));
+    setState(() {
+      _exercises.add(ExerciseEntry(
+        exerciseId: exId,
+        exerciseName: exName,
+        sets: sets,
+        trackingType: TrackingType.reps,
+        workoutLogExerciseId: logExId,
+      ));
+    });
+
+    // Pre-fill weight/reps if provided
+    if (kg != null || reps != null) {
+      final exIdx = _exercises.length - 1;
+      for (var i = 0; i < setCount; i++) {
+        if (kg != null) {
+          _ctrl('${exIdx}_${i}_w').text = kg.toStringAsFixed(
+              kg == kg.roundToDouble() ? 0 : 1);
+        }
+        if (reps != null) {
+          _ctrl('${exIdx}_${i}_r').text = reps.toString();
+        }
+      }
+    }
+  }
+
+  void _voiceAddOrUpdateExercise(
+    String exId, String exName, int setCount, double? kg, int? reps,
+  ) {
+    // Check if exercise already in workout
+    final existingIdx =
+        _exercises.indexWhere((e) => e.exerciseId == exId);
+    if (existingIdx >= 0) {
+      // Add sets to existing exercise
+      setState(() {
+        for (var i = 0; i < setCount; i++) {
+          _exercises[existingIdx].sets.add(SetEntry(id: _uuid.v4()));
+        }
+      });
+      // Pre-fill the new sets
+      final startSet = _exercises[existingIdx].sets.length - setCount;
+      for (var i = 0; i < setCount; i++) {
+        final setIdx = startSet + i;
+        if (kg != null) {
+          _ctrl('${existingIdx}_${setIdx}_w').text = kg.toStringAsFixed(
+              kg == kg.roundToDouble() ? 0 : 1);
+        }
+        if (reps != null) {
+          _ctrl('${existingIdx}_${setIdx}_r').text = reps.toString();
+        }
+      }
+    } else {
+      _voiceAddExercise(exId, exName, setCount, kg, reps);
+    }
+  }
+
+  void _voiceUpdateLatestSet(
+    String exId, String exName, double kg, int? reps,
+  ) {
+    final existingIdx =
+        _exercises.indexWhere((e) => e.exerciseId == exId);
+
+    if (existingIdx >= 0) {
+      final exercise = _exercises[existingIdx];
+      // Find latest incomplete set
+      var targetSet = -1;
+      for (var i = 0; i < exercise.sets.length; i++) {
+        if (!exercise.sets[i].isCompleted) {
+          targetSet = i;
+          break;
+        }
+      }
+
+      if (targetSet < 0) {
+        // All sets completed — add a new one
+        setState(() {
+          exercise.sets.add(SetEntry(id: _uuid.v4()));
+        });
+        targetSet = exercise.sets.length - 1;
+      }
+
+      // Update the controllers
+      _ctrl('${existingIdx}_${targetSet}_w').text = kg.toStringAsFixed(
+          kg == kg.roundToDouble() ? 0 : 1);
+      if (reps != null) {
+        _ctrl('${existingIdx}_${targetSet}_r').text = reps.toString();
+      }
+      setState(() {});
+    } else {
+      // Exercise not in workout — add it with 1 set
+      _voiceAddExercise(exId, exName, 1, kg, reps);
+    }
+  }
+
+  void _voiceRemoveExercise(String exId) {
+    final idx = _exercises.indexWhere((e) => e.exerciseId == exId);
+    if (idx < 0) {
+      _showVoiceError('Exercise not in current workout');
+      return;
+    }
+    if (_exercises.length == 1) {
+      _showVoiceError('Cannot remove the last exercise');
+      return;
+    }
+    _removeExerciseFromWorkout(idx);
+  }
+
+  void _voiceAddSetsToExisting(
+    String exId, String exName, int count, double? kg, int? reps,
+  ) {
+    final idx = _exercises.indexWhere((e) => e.exerciseId == exId);
+    if (idx >= 0) {
+      final startSet = _exercises[idx].sets.length;
+      setState(() {
+        for (var i = 0; i < count; i++) {
+          _exercises[idx].sets.add(SetEntry(id: _uuid.v4()));
+        }
+      });
+      for (var i = 0; i < count; i++) {
+        final setIdx = startSet + i;
+        if (kg != null) {
+          _ctrl('${idx}_${setIdx}_w').text =
+              kg.toStringAsFixed(kg == kg.roundToDouble() ? 0 : 1);
+        }
+        if (reps != null) {
+          _ctrl('${idx}_${setIdx}_r').text = reps.toString();
+        }
+      }
+    } else {
+      _voiceAddExercise(exId, exName, count, kg, reps);
+    }
+  }
+
+  void _voiceUpdateSpecificSet(
+    String exId, int setIndex, double kg, int? reps,
+  ) {
+    final idx = _exercises.indexWhere((e) => e.exerciseId == exId);
+    if (idx < 0) {
+      _showVoiceError('Exercise not in current workout');
+      return;
+    }
+    final zeroIdx = setIndex - 1; // Convert 1-based to 0-based
+    if (zeroIdx < 0 || zeroIdx >= _exercises[idx].sets.length) {
+      _showVoiceError('Set $setIndex does not exist');
+      return;
+    }
+    if (kg > 0) {
+      _ctrl('${idx}_${zeroIdx}_w').text =
+          kg.toStringAsFixed(kg == kg.roundToDouble() ? 0 : 1);
+    }
+    if (reps != null) {
+      _ctrl('${idx}_${zeroIdx}_r').text = reps.toString();
+    }
+    setState(() {});
+  }
+
+  void _voiceCompleteExercise(String exId) {
+    final idx = _exercises.indexWhere((e) => e.exerciseId == exId);
+    if (idx < 0) {
+      _showVoiceError('Exercise not in current workout');
+      return;
+    }
+    // Only complete if all sets have values
+    if (!_allSetsHaveValues(idx)) {
+      _showVoiceError('Fill in all weight/reps before completing');
+      return;
+    }
+    setState(() {
+      for (var i = 0; i < _exercises[idx].sets.length; i++) {
+        _exercises[idx].sets[i].isCompleted = true;
+      }
+    });
+  }
+
+  void _showVoiceCommandHelp() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _VoiceCommandHelpSheet(
+        isSmartMode: _voiceService.isSmartMode,
+      ),
+    );
+  }
+
+  void _showVoiceError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  IconData _getCommandIcon(VoiceCommand cmd) {
+    if (cmd is AddExerciseCommand) return Icons.add_rounded;
+    if (cmd is AddSetsCommand) return Icons.playlist_add_rounded;
+    if (cmd is UpdateSetCommand) return Icons.edit_rounded;
+    if (cmd is RemoveExerciseCommand) return Icons.remove_circle_outline;
+    if (cmd is AddSetToExerciseCommand) return Icons.playlist_add_rounded;
+    if (cmd is UpdateSpecificSetCommand) return Icons.edit_rounded;
+    if (cmd is CompleteExerciseCommand) return Icons.check_circle_outline;
+    return Icons.mic_rounded;
+  }
+
+  // -------------------------------------------------------------------------
   // Build
   // -------------------------------------------------------------------------
 
@@ -532,17 +916,19 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
       child: Scaffold(
         backgroundColor: AppColors.backgroundDark,
         appBar: _buildAppBar(),
-        body: planExercises.when(
-          data: (exercises) {
-            if (!_isInitialised) {
-              // Kick off initialisation once we have plan data
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _initialiseWorkout(exercises);
-              });
-            }
-            return _buildBody();
-          },
-          loading: () => const Center(
+        floatingActionButton: null,
+        body: Stack(
+          children: [
+            planExercises.when(
+              data: (exercises) {
+                if (!_isInitialised) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _initialiseWorkout(exercises);
+                  });
+                }
+                return _buildBody();
+              },
+              loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.primary),
           ),
           error: (e, _) => Center(
@@ -550,6 +936,22 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: AppColors.danger)),
           ),
+        ),
+
+            // Confirmation card
+            if (_pendingAction != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: VoiceConfirmationCard(
+                  actionText: _pendingAction!.displayText,
+                  icon: _getCommandIcon(_pendingAction!.command),
+                  onConfirm: () => _executeVoiceAction(_pendingAction!),
+                  onCancel: () => setState(() => _pendingAction = null),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -813,6 +1215,55 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                     ],
                   ),
                 ),
+                // Remove exercise
+                GestureDetector(
+                  onTap: () => _confirmRemoveExercise(exIdx),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppDimensions.borderRadiusSmall),
+                      border: Border.all(color: AppColors.borderDark, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.danger,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Complete All / Undo All icon button
+                GestureDetector(
+                  onTap: () => _toggleAllSets(exIdx),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _areAllSetsCompleted(exIdx)
+                          ? AppColors.primary
+                          : (_allSetsHaveValues(exIdx)
+                              ? AppColors.primary
+                              : Colors.transparent),
+                      borderRadius: BorderRadius.circular(AppDimensions.borderRadiusSmall),
+                      border: Border.all(
+                        color: _areAllSetsCompleted(exIdx) || _allSetsHaveValues(exIdx)
+                            ? AppColors.primary
+                            : AppColors.borderDark,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.done_all_rounded,
+                      size: 20,
+                      color: _areAllSetsCompleted(exIdx)
+                          ? AppColors.onPrimary
+                          : (_allSetsHaveValues(exIdx)
+                              ? AppColors.onPrimary
+                              : AppColors.textMutedDark),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -852,57 +1303,24 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           ...List.generate(exercise.sets.length,
               (setIdx) => _buildSetRow(exIdx, setIdx)),
 
-          // Add Set + Complete All buttons
+          // Add Set button (full width)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            child: Row(
-              children: [
-                // Add Set button (left half)
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _addSet(exIdx),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Add Set'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppDimensions.borderRadiusSmall),
-                        side: BorderSide(color: AppColors.primary.withOpacity(0.25)),
-                      ),
-                    ),
+            child: SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () => _addSet(exIdx),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add Set'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppDimensions.borderRadiusSmall),
+                    side: BorderSide(color: AppColors.primary.withOpacity(0.25)),
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Complete All / Undo All button (right half)
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: () => _toggleAllSets(exIdx),
-                    icon: Icon(
-                      _areAllSetsCompleted(exIdx) ? Icons.undo_rounded : Icons.done_all_rounded,
-                      size: 18,
-                    ),
-                    label: Text(_areAllSetsCompleted(exIdx) ? 'Undo All' : 'Complete All'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: _areAllSetsCompleted(exIdx)
-                          ? AppColors.textSecondaryDark
-                          : (_allSetsHaveValues(exIdx) ? AppColors.onPrimary : AppColors.success),
-                      backgroundColor: _areAllSetsCompleted(exIdx)
-                          ? Colors.transparent
-                          : (_allSetsHaveValues(exIdx) ? AppColors.success : Colors.transparent),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppDimensions.borderRadiusSmall),
-                        side: BorderSide(
-                          color: _areAllSetsCompleted(exIdx)
-                              ? AppColors.borderDark
-                              : (_allSetsHaveValues(exIdx) ? AppColors.success : AppColors.success.withOpacity(0.25)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -1203,35 +1621,240 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           top: BorderSide(color: AppColors.borderDark, width: 1),
         ),
       ),
-      child: SizedBox(
-        width: double.infinity,
-        height: 52,
-        child: FilledButton.icon(
-          onPressed: _isSaving ? null : _finishWorkout,
-          icon: _isSaving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppColors.onPrimary))
-              : const Icon(Icons.check_circle_rounded, size: 22),
-          label: Text(
-            _isSaving ? 'Saving...' : 'Finish Workout',
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 16,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              // Info button
+              GestureDetector(
+                onTap: _showVoiceCommandHelp,
+                child: Container(
+                  width: 40,
+                  height: 52,
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.textSecondaryDark,
+                    size: 22,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Finish button
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: _isSaving ? null : _finishWorkout,
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: AppColors.onPrimary))
+                        : const Icon(Icons.check_circle_rounded, size: 22),
+                    label: Text(
+                      _isSaving ? 'Saving...' : 'Finish Workout',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.borderRadiusMedium),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Mic button
+              GestureDetector(
+                onTap: _startVoiceListening,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(AppDimensions.borderRadiusMedium),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5),
+                  ),
+                  child: const Icon(Icons.mic_rounded, color: AppColors.primary, size: 26),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Voice Command Help Sheet
+// ---------------------------------------------------------------------------
+
+class _VoiceCommandHelpSheet extends StatelessWidget {
+  final bool isSmartMode;
+  const _VoiceCommandHelpSheet({required this.isSmartMode});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.backgroundDark,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariantDark,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.onPrimary,
-            disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
-            shape: RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(AppDimensions.borderRadiusMedium),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 8, 0),
+            child: Row(
+              children: [
+                const Icon(Icons.mic_rounded, color: AppColors.primary, size: 24),
+                const SizedBox(width: 10),
+                const Text(
+                  'Voice Commands',
+                  style: TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryDark),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
           ),
-        ),
+          // Mode badge
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSmartMode
+                    ? AppColors.primary.withOpacity(0.1)
+                    : AppColors.surfaceDark,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isSmartMode
+                      ? AppColors.primary.withOpacity(0.3)
+                      : AppColors.borderDark,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isSmartMode ? Icons.auto_awesome : Icons.text_fields_rounded,
+                    color: isSmartMode ? AppColors.primary : AppColors.textSecondaryDark,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    isSmartMode ? 'AI Mode · Gemini Nano' : 'Basic Mode · Pattern Matching',
+                    style: TextStyle(
+                      color: isSmartMode ? AppColors.primary : AppColors.textSecondaryDark,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Command list
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSection('Add Exercises', Icons.add_circle_outline, [
+                    '"Add bicep curl"',
+                    '"3 sets of bench press at 80kg"',
+                    '"3 sets of curls 10kg 12 reps"',
+                  ]),
+                  _buildSection('Update Sets', Icons.edit_outlined, [
+                    '"Bench press 80kg 8 reps"',
+                    '"Curls at 12kg"',
+                    if (isSmartMode) '"Set 2 of bench press 90kg 6 reps"',
+                  ]),
+                  _buildSection('Add Sets to Existing', Icons.playlist_add, [
+                    '"Add 2 sets to bench press"',
+                    '"One more set of curls"',
+                  ]),
+                  _buildSection('Remove Exercise', Icons.remove_circle_outline, [
+                    '"Remove bench press"',
+                    '"Delete bicep curl"',
+                  ]),
+                  _buildSection('Complete Exercise', Icons.check_circle_outline, [
+                    '"Complete bench press"',
+                    '"Mark curls as done"',
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(String title, IconData icon, List<String> examples) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.primary, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...examples.map((ex) => Padding(
+                padding: const EdgeInsets.only(left: 26, bottom: 4),
+                child: Text(
+                  ex,
+                  style: const TextStyle(
+                    color: AppColors.textSecondaryDark,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              )),
+        ],
       ),
     );
   }

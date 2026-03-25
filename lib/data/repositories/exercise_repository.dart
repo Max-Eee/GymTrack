@@ -56,5 +56,11 @@ class ExerciseRepository {
   Future<int> insertExercise(ExercisesCompanion exercise) =>
       _exerciseDao.insertExercise(exercise);
   
+  Future<bool> updateExercise(ExerciseData exercise) =>
+      _exerciseDao.updateExercise(exercise);
+  
+  Future<int> deleteExercise(String id) =>
+      _exerciseDao.deleteExercise(id);
+  
   Future<int> getExerciseCount() => _exerciseDao.getExerciseCount();
 }

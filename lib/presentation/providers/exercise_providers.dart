@@ -51,6 +51,9 @@ final exerciseFilterMusclesProvider = StateProvider<List<Muscle>>((ref) => []);
 // Show Only Favorites Toggle
 final showOnlyFavoritesProvider = StateProvider<bool>((ref) => false);
 
+// Show Only Custom Exercises Toggle
+final showOnlyCustomProvider = StateProvider<bool>((ref) => false);
+
 // Filtered Exercises – combines search, category/level/equipment/muscle filters, and favorites toggle.
 final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async {
   final repo = ref.watch(exerciseRepositoryProvider);
@@ -60,6 +63,7 @@ final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async
   final muscles = ref.watch(exerciseFilterMusclesProvider);
   final searchQuery = ref.watch(exerciseSearchQueryProvider).trim().toLowerCase();
   final showOnlyFavorites = ref.watch(showOnlyFavoritesProvider);
+  final showOnlyCustom = ref.watch(showOnlyCustomProvider);
 
   // Base list: apply category/level/equipment/muscle filters at the DB level.
   List<ExerciseData> exercises;
@@ -87,6 +91,11 @@ final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async
     final favorites = await repo.getFavoriteExercises();
     final favoriteIds = favorites.map((f) => f.id).toSet();
     exercises = exercises.where((e) => favoriteIds.contains(e.id)).toList();
+  }
+
+  // Apply custom-only filter.
+  if (showOnlyCustom) {
+    exercises = exercises.where((e) => e.isCustom).toList();
   }
 
   return exercises;

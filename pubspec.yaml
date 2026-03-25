@@ -1,0 +1,97 @@
+name: gym_track
+description: "GymTrack - Complete workout tracking app for Android"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.0
+  riverpod_annotation: ^2.3.0
+  
+  # Database
+  drift: ^2.14.0
+  sqlite3_flutter_libs: ^0.5.0
+  path_provider: ^2.1.0
+  path: ^1.8.3
+  
+  # Routing
+  go_router: ^13.0.0
+  
+  # Models & Serialization
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+  equatable: ^2.0.5
+  
+  # UI
+  google_fonts: ^6.1.0
+  cached_network_image: ^3.3.0
+  flutter_svg: ^2.0.9
+  
+  # Charts
+  charts_flutter: ^0.12.0
+  
+  # Utilities
+  intl: ^0.17.0
+  uuid: ^4.3.3
+  shared_preferences: ^2.2.2
+  
+  # Animations
+  confetti: ^0.7.0
+  
+  # Other
+  url_launcher: ^6.2.4
+  share_plus: ^7.2.2
+
+  cupertino_icons: ^1.0.8
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # Build runners
+  build_runner: ^2.4.7
+  drift_dev: ^2.14.0
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+  riverpod_generator: ^2.3.0
+  
+  # Testing
+  integration_test:
+    sdk: flutter
+  mockito: ^5.4.4
+  
+  # Linting
+  flutter_lints: ^4.0.0
+  
+  # App Icon
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#F0F0F0"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon.png"
+
+flutter:
+  uses-material-design: true
+
+  # Assets
+  assets:
+    - assets/
+    - assets/exercises.json
+    - assets/icon/

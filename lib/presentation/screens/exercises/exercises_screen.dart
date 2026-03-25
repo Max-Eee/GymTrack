@@ -47,6 +47,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     count += ref.read(exerciseFilterEquipmentProvider).length;
     count += ref.read(exerciseFilterMusclesProvider).length;
     if (ref.read(showOnlyFavoritesProvider)) count++;
+    if (ref.read(showOnlyCustomProvider)) count++;
     return count;
   }
 
@@ -56,6 +57,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     ref.read(exerciseFilterEquipmentProvider.notifier).state = [];
     ref.read(exerciseFilterMusclesProvider.notifier).state = [];
     ref.read(showOnlyFavoritesProvider.notifier).state = false;
+    ref.read(showOnlyCustomProvider.notifier).state = false;
     ref.read(exerciseSearchQueryProvider.notifier).state = '';
     _searchController.clear();
   }
@@ -157,28 +159,35 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
               ),
             ),
 
-            // Collapsible filter panel
-            _FilterPanel(
-              visible: _showFilters,
-              selectedCategories: selectedCategories,
-              selectedLevels: selectedLevels,
-              selectedEquipment: selectedEquipment,
-              selectedMuscles: selectedMuscles,
-              showOnlyFavorites: showOnlyFavorites,
-              onClearAll: hasFilters ? _clearAllFilters : null,
-            ),
-
-            // Exercise list
+            // Filter panel + exercise list share the same expanded space
             Expanded(
-              child: exercises.when(
-                data: (list) {
-                  if (list.isEmpty) {
-                    return _EmptyState(hasFilters: hasSearchOrFilters);
-                  }
-                  return _ExerciseListView(exercises: list);
-                },
-                loading: () => const _ShimmerList(),
-                error: (e, _) => _ErrorState(error: e),
+              child: Column(
+                children: [
+                  // Collapsible filter panel
+                  _FilterPanel(
+                    visible: _showFilters,
+                    selectedCategories: selectedCategories,
+                    selectedLevels: selectedLevels,
+                    selectedEquipment: selectedEquipment,
+                    selectedMuscles: selectedMuscles,
+                    showOnlyFavorites: showOnlyFavorites,
+                    onClearAll: hasFilters ? _clearAllFilters : null,
+                  ),
+
+                  // Exercise list
+                  Expanded(
+                    child: exercises.when(
+                      data: (list) {
+                        if (list.isEmpty) {
+                          return _EmptyState(hasFilters: hasSearchOrFilters);
+                        }
+                        return _ExerciseListView(exercises: list);
+                      },
+                      loading: () => const _ShimmerList(),
+                      error: (e, _) => _ErrorState(error: e),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -400,13 +409,60 @@ class _FilterPanel extends ConsumerWidget {
                 ),
                 SizedBox(
                   height: 28,
-                  child: Switch.adaptive(
+                  child: Switch(
                     value: showOnlyFavorites,
                     activeColor: AppColors.primary,
+                    activeTrackColor: AppColors.primary.withOpacity(0.4),
+                    inactiveThumbColor: AppColors.textMutedDark,
+                    inactiveTrackColor: AppColors.surfaceVariantDark,
+                    trackOutlineColor: WidgetStateProperty.resolveWith(
+                      (states) => states.contains(WidgetState.selected)
+                          ? AppColors.primary.withOpacity(0.4)
+                          : AppColors.textMutedDark.withOpacity(0.5),
+                    ),
                     onChanged: (v) => ref
                         .read(showOnlyFavoritesProvider.notifier)
                         .state = v,
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // Custom Only Toggle
+            Row(
+              children: [
+                const Icon(Icons.add_circle_outline, color: AppColors.primary, size: 20),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Custom Only',
+                    style: TextStyle(
+                      color: AppColors.textPrimaryDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final showOnlyCustom = ref.watch(showOnlyCustomProvider);
+                    return Switch(
+                      value: showOnlyCustom,
+                      activeColor: AppColors.primary,
+                      inactiveThumbColor: AppColors.textSecondaryDark,
+                      activeTrackColor: AppColors.primary.withOpacity(0.5),
+                      inactiveTrackColor: AppColors.surfaceVariantDark,
+                      trackOutlineColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? AppColors.primary.withOpacity(0.4)
+                            : AppColors.textMutedDark.withOpacity(0.5),
+                      ),
+                      onChanged: (v) => ref
+                          .read(showOnlyCustomProvider.notifier)
+                          .state = v,
+                    );
+                  },
                 ),
               ],
             ),
@@ -936,12 +992,12 @@ void _showExerciseDetail(BuildContext context, ExerciseData exercise) {
   );
 }
 
-class _ExerciseDetailSheet extends StatelessWidget {
+class _ExerciseDetailSheet extends ConsumerWidget {
   const _ExerciseDetailSheet({required this.exercise});
   final ExerciseData exercise;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
     return DraggableScrollableSheet(
@@ -984,6 +1040,25 @@ class _ExerciseDetailSheet extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Edit button (only for custom exercises)
+                    if (exercise.isCustom)
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined,
+                            color: AppColors.primary, size: 22),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showEditExerciseSheet(context, ref, exercise);
+                        },
+                        tooltip: 'Edit',
+                      ),
+                    // Delete button (only for custom exercises)
+                    if (exercise.isCustom)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            color: AppColors.danger, size: 22),
+                        onPressed: () => _confirmDeleteExercise(context, ref, exercise),
+                        tooltip: 'Delete',
+                      ),
                     IconButton(
                       icon: const Icon(Icons.close_rounded,
                           color: AppColors.textSecondaryDark),
@@ -1335,6 +1410,300 @@ class _DetailMuscleChip extends StatelessWidget {
           color: isPrimary ? AppColors.primary : AppColors.textSecondaryDark,
           fontSize: 12,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delete Exercise Confirmation
+// ---------------------------------------------------------------------------
+
+void _confirmDeleteExercise(BuildContext context, WidgetRef ref, ExerciseData exercise) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.surfaceDark,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Delete Exercise',
+          style: TextStyle(color: AppColors.textPrimaryDark)),
+      content: Text(
+        'Delete "${exercise.name}"? This will also remove it from all routines.',
+        style: const TextStyle(color: AppColors.textSecondaryDark),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel',
+              style: TextStyle(color: AppColors.textSecondaryDark)),
+        ),
+        TextButton(
+          onPressed: () async {
+            Navigator.pop(ctx); // Close dialog
+            Navigator.pop(context); // Close detail sheet
+            
+            final repo = ref.read(exerciseRepositoryProvider);
+            await repo.deleteExercise(exercise.id);
+            ref.invalidate(filteredExercisesProvider);
+            
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Deleted ${exercise.name}'),
+                  backgroundColor: AppColors.success,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          },
+          child: const Text('Delete',
+              style: TextStyle(color: AppColors.danger)),
+        ),
+      ],
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Edit Exercise Sheet
+// ---------------------------------------------------------------------------
+
+void _showEditExerciseSheet(BuildContext context, WidgetRef ref, ExerciseData exercise) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => _EditExerciseSheet(exercise: exercise),
+  );
+}
+
+class _EditExerciseSheet extends ConsumerStatefulWidget {
+  const _EditExerciseSheet({required this.exercise});
+  final ExerciseData exercise;
+
+  @override
+  ConsumerState<_EditExerciseSheet> createState() => _EditExerciseSheetState();
+}
+
+class _EditExerciseSheetState extends ConsumerState<_EditExerciseSheet> {
+  late TextEditingController _nameController;
+  late CategoryType _selectedCategory;
+  late LevelType _selectedLevel;
+  late List<Muscle> _primaryMuscles;
+  late List<Muscle> _secondaryMuscles;
+  EquipmentType? _selectedEquipment;
+  ForceType? _selectedForce;
+  MechanicType? _selectedMechanic;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.exercise.name);
+    _selectedCategory = widget.exercise.category;
+    _selectedLevel = widget.exercise.level;
+    _primaryMuscles = List.from(widget.exercise.primaryMuscles);
+    _secondaryMuscles = List.from(widget.exercise.secondaryMuscles);
+    _selectedEquipment = widget.exercise.equipment;
+    _selectedForce = widget.exercise.force;
+    _selectedMechanic = widget.exercise.mechanic;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveChanges() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Exercise name cannot be empty'),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+      return;
+    }
+
+    final updatedExercise = widget.exercise.copyWith(
+      name: _nameController.text.trim(),
+      category: _selectedCategory,
+      level: _selectedLevel,
+      primaryMuscles: _primaryMuscles,
+      secondaryMuscles: _secondaryMuscles,
+      equipment: drift.Value(_selectedEquipment),
+      force: drift.Value(_selectedForce),
+      mechanic: drift.Value(_selectedMechanic),
+    );
+
+    final repo = ref.read(exerciseRepositoryProvider);
+    await repo.updateExercise(updatedExercise);
+    ref.invalidate(filteredExercisesProvider);
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Exercise updated'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).viewInsets.bottom;
+    
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, bottomPad + 20),
+      decoration: const BoxDecoration(
+        color: AppColors.backgroundDark,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Edit Exercise',
+                  style: TextStyle(
+                    color: AppColors.textPrimaryDark,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryDark),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Name
+            TextField(
+              controller: _nameController,
+              style: const TextStyle(color: AppColors.textPrimaryDark),
+              decoration: const InputDecoration(
+                labelText: 'Exercise Name',
+                labelStyle: TextStyle(color: AppColors.textSecondaryDark),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.borderDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Category
+            DropdownButtonFormField<CategoryType>(
+              value: _selectedCategory,
+              dropdownColor: AppColors.surfaceDark,
+              style: const TextStyle(color: AppColors.textPrimaryDark),
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                labelStyle: TextStyle(color: AppColors.textSecondaryDark),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.borderDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+              items: CategoryType.values.map((cat) {
+                return DropdownMenuItem(
+                  value: cat,
+                  child: Text(cat.displayName),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() => _selectedCategory = val!),
+            ),
+            const SizedBox(height: 16),
+
+            // Level
+            DropdownButtonFormField<LevelType>(
+              value: _selectedLevel,
+              dropdownColor: AppColors.surfaceDark,
+              style: const TextStyle(color: AppColors.textPrimaryDark),
+              decoration: const InputDecoration(
+                labelText: 'Level',
+                labelStyle: TextStyle(color: AppColors.textSecondaryDark),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.borderDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+              items: LevelType.values.map((level) {
+                return DropdownMenuItem(
+                  value: level,
+                  child: Text(level.displayName),
+                );
+              }).toList(),
+              onChanged: (val) => setState(() => _selectedLevel = val!),
+            ),
+            const SizedBox(height: 16),
+
+            // Equipment
+            DropdownButtonFormField<EquipmentType?>(
+              value: _selectedEquipment,
+              dropdownColor: AppColors.surfaceDark,
+              style: const TextStyle(color: AppColors.textPrimaryDark),
+              decoration: const InputDecoration(
+                labelText: 'Equipment',
+                labelStyle: TextStyle(color: AppColors.textSecondaryDark),
+                enabledBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.borderDark),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: AppColors.primary),
+                ),
+              ),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('None')),
+                ...EquipmentType.values.map((eq) {
+                  return DropdownMenuItem(
+                    value: eq,
+                    child: Text(eq.displayName),
+                  );
+                }),
+              ],
+              onChanged: (val) => setState(() => _selectedEquipment = val),
+            ),
+            const SizedBox(height: 24),
+
+            // Save button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: FilledButton(
+                onPressed: _saveChanges,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: AppColors.onPrimary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Save Changes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
