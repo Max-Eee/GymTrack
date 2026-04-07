@@ -39,11 +39,13 @@ class AddSetsCommand extends VoiceCommand {
 class UpdateSetCommand extends VoiceCommand {
   final double weightKg;
   final int? reps;
+  final bool completed;
 
   const UpdateSetCommand({
     required super.exerciseName,
     required this.weightKg,
     this.reps,
+    this.completed = false,
   });
 
   @override
@@ -90,12 +92,14 @@ class UpdateSpecificSetCommand extends VoiceCommand {
   final int setIndex; // 1-based
   final double weightKg;
   final int? reps;
+  final bool completed;
 
   const UpdateSpecificSetCommand({
     required super.exerciseName,
     required this.setIndex,
     required this.weightKg,
     this.reps,
+    this.completed = false,
   });
 
   @override

@@ -27,12 +27,8 @@ mixin _$UserExercisePB {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   String? get workoutLogId => throw _privateConstructorUsedError;
 
-  /// Serializes this UserExercisePB to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of UserExercisePB
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $UserExercisePBCopyWith<UserExercisePB> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -62,8 +58,6 @@ class _$UserExercisePBCopyWithImpl<$Res, $Val extends UserExercisePB>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of UserExercisePB
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -128,8 +122,6 @@ class __$$UserExercisePBImplCopyWithImpl<$Res>
       _$UserExercisePBImpl _value, $Res Function(_$UserExercisePBImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of UserExercisePB
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -218,14 +210,12 @@ class _$UserExercisePBImpl implements _UserExercisePB {
                 other.workoutLogId == workoutLogId));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, exerciseId, weight, reps,
       exerciseDuration, createdAt, workoutLogId);
 
-  /// Create a copy of UserExercisePB
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$UserExercisePBImplCopyWith<_$UserExercisePBImpl> get copyWith =>
@@ -264,11 +254,8 @@ abstract class _UserExercisePB implements UserExercisePB {
   DateTime? get createdAt;
   @override
   String? get workoutLogId;
-
-  /// Create a copy of UserExercisePB
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$UserExercisePBImplCopyWith<_$UserExercisePBImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

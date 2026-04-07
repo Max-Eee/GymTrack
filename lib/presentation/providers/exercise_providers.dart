@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/database/app_database.dart';
 import '../../models/enums.dart';
 import 'app_providers.dart';
+import 'user_providers.dart';
 
 // All Exercises Stream
 final allExercisesProvider = StreamProvider<List<ExerciseData>>((ref) {
@@ -54,6 +55,9 @@ final showOnlyFavoritesProvider = StateProvider<bool>((ref) => false);
 // Show Only Custom Exercises Toggle
 final showOnlyCustomProvider = StateProvider<bool>((ref) => false);
 
+// Show Only My Equipment Toggle
+final showOnlyMyEquipmentProvider = StateProvider<bool>((ref) => false);
+
 // Filtered Exercises – combines search, category/level/equipment/muscle filters, and favorites toggle.
 final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async {
   final repo = ref.watch(exerciseRepositoryProvider);
@@ -64,6 +68,7 @@ final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async
   final searchQuery = ref.watch(exerciseSearchQueryProvider).trim().toLowerCase();
   final showOnlyFavorites = ref.watch(showOnlyFavoritesProvider);
   final showOnlyCustom = ref.watch(showOnlyCustomProvider);
+  final showOnlyMyEquipment = ref.watch(showOnlyMyEquipmentProvider);
 
   // Base list: apply category/level/equipment/muscle filters at the DB level.
   List<ExerciseData> exercises;
@@ -96,6 +101,18 @@ final filteredExercisesProvider = FutureProvider<List<ExerciseData>>((ref) async
   // Apply custom-only filter.
   if (showOnlyCustom) {
     exercises = exercises.where((e) => e.isCustom).toList();
+  }
+
+  // Apply my-equipment filter.
+  if (showOnlyMyEquipment) {
+    final userEquipmentAsync = ref.watch(userEquipmentProvider);
+    final userEquipmentList = userEquipmentAsync.valueOrNull ?? [];
+    final myEquipmentTypes = userEquipmentList.map((e) => e.equipmentType).toSet();
+    // Always include bodyOnly exercises
+    myEquipmentTypes.add(EquipmentType.bodyOnly);
+    exercises = exercises.where((e) =>
+      e.equipment == null || myEquipmentTypes.contains(e.equipment)
+    ).toList();
   }
 
   return exercises;

@@ -8,6 +8,7 @@ import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
 import '../../providers/workout_providers.dart';
 import '../../providers/user_providers.dart';
+import '../../providers/nutrition_providers.dart';
 import '../../../data/database/app_database.dart';
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,12 @@ class DashboardScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
 
+                // ── Nutrition Summary ──────────────────────────────
+                _buildSectionHeading('Today\'s Nutrition'),
+                const SizedBox(height: 12),
+                _buildNutritionSummary(ref),
+                const SizedBox(height: 24),
+
                 // ── Muscle Activity Heat Map ──────────────────────
                 _buildSectionHeading('Muscle Activity'),
                 const SizedBox(height: 12),
@@ -103,7 +110,7 @@ class DashboardScreen extends ConsumerWidget {
                   workoutLogs: workoutLogs,
                   workoutPlans: workoutPlans,
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 100),
               ],
             ),
           ),
@@ -188,6 +195,130 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+
+  // ── Nutrition Summary ───────────────────────────────────────────────────
+  Widget _buildNutritionSummary(WidgetRef ref) {
+    final todayLogs = ref.watch(todayFoodLogsProvider);
+
+    return todayLogs.when(
+      data: (logs) {
+        final totalCalories = logs.fold(0.0, (sum, l) => sum + l.calories);
+        final totalProtein = logs.fold(0.0, (sum, l) => sum + l.proteinG);
+        final totalCarbs = logs.fold(0.0, (sum, l) => sum + l.carbsG);
+        final totalFat = logs.fold(0.0, (sum, l) => sum + l.fatG);
+
+        if (logs.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderDark),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.restaurant_outlined, color: AppColors.textMutedDark.withOpacity(0.5), size: 40),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No meals logged today',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimaryDark),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Track your nutrition to see summary',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondaryDark),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMutedDark, size: 16),
+              ],
+            ),
+          );
+        }
+
+        return GestureDetector(
+          onTap: () => ref.read(currentTabProvider.notifier).state = 3, // Navigate to Nutrition tab
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceDark,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderDark),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.restaurant_rounded, color: AppColors.primary, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Calories',
+                            style: TextStyle(fontSize: 12, color: AppColors.textSecondaryDark, fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${totalCalories.toStringAsFixed(0)} kcal',
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.primary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMutedDark, size: 16),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _NutritionMacro(
+                        label: 'Protein',
+                        value: totalProtein,
+                        color: AppColors.secondary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _NutritionMacro(
+                        label: 'Carbs',
+                        value: totalCarbs,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _NutritionMacro(
+                        label: 'Fat',
+                        value: totalFat,
+                        color: AppColors.warning,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const _ShimmerCard(height: 140),
+      error: (_, __) => const _ErrorCard(message: 'Could not load nutrition data', onRetry: null),
     );
   }
 
@@ -1233,6 +1364,54 @@ class _ShimmerCard extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// _NutritionMacro – Nutrition macro display
+// ═══════════════════════════════════════════════════════════════════════════
+class _NutritionMacro extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color color;
+
+  const _NutritionMacro({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '${value.toStringAsFixed(0)}g',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textSecondaryDark,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // _ShimmerBlock – inline loading placeholder
 // ═══════════════════════════════════════════════════════════════════════════
 class _ShimmerBlock extends StatelessWidget {
@@ -1537,7 +1716,7 @@ const _backMuscles = <Muscle, _MuscleRegion>{
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Body Outline Painter — draws a simplified human silhouette
+// Body Outline Painter — draws a realistic human silhouette
 // ═══════════════════════════════════════════════════════════════════════════
 class _BodyOutlinePainter extends CustomPainter {
   final bool isFront;
@@ -1545,81 +1724,241 @@ class _BodyOutlinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.surfaceVariantDark.withOpacity(0.25)
+    final outlinePaint = Paint()
+      ..color = AppColors.surfaceVariantDark.withOpacity(0.35)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
+      ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
+
+    final fillPaint = Paint()
+      ..color = AppColors.surfaceVariantDark.withOpacity(0.08)
+      ..style = PaintingStyle.fill;
 
     final cx = size.width / 2;
 
-    // Head
+    // Head with gradient
+    final headGradient = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          AppColors.surfaceVariantDark.withOpacity(0.12),
+          AppColors.surfaceVariantDark.withOpacity(0.06),
+        ],
+      ).createShader(Rect.fromCenter(center: Offset(cx, 28), width: 30, height: 36));
+    
     canvas.drawOval(
       Rect.fromCenter(center: Offset(cx, 28), width: 30, height: 36),
-      paint,
+      headGradient,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, 28), width: 30, height: 36),
+      outlinePaint,
     );
 
+    // Create body path
+    final bodyPath = Path();
+    
     // Neck
-    canvas.drawLine(Offset(cx - 6, 46), Offset(cx - 6, 58), paint);
-    canvas.drawLine(Offset(cx + 6, 46), Offset(cx + 6, 58), paint);
+    bodyPath.moveTo(cx - 8, 46);
+    bodyPath.lineTo(cx - 8, 60);
+    bodyPath.lineTo(cx + 8, 60);
+    bodyPath.lineTo(cx + 8, 46);
+    canvas.drawPath(bodyPath, fillPaint);
+    canvas.drawPath(bodyPath, outlinePaint);
 
-    // Shoulders
-    final shoulderPath = Path()
-      ..moveTo(cx - 6, 58)
-      ..lineTo(cx - 40, 72)
-      ..moveTo(cx + 6, 58)
-      ..lineTo(cx + 40, 72);
-    canvas.drawPath(shoulderPath, paint);
+    // Torso outline with realistic shape
+    final torsoPath = Path();
+    torsoPath.moveTo(cx - 8, 60); // Left neck base
+    
+    // Left shoulder
+    torsoPath.cubicTo(cx - 20, 65, cx - 38, 68, cx - 42, 75);
+    
+    // Left torso
+    torsoPath.cubicTo(cx - 42, 90, cx - 40, 110, cx - 38, 130);
+    torsoPath.cubicTo(cx - 37, 145, cx - 34, 155, cx - 32, 165);
+    
+    // Left hip
+    torsoPath.cubicTo(cx - 28, 170, cx - 22, 172, cx - 18, 172);
+    
+    // Groin area (middle bottom)
+    torsoPath.lineTo(cx - 8, 172);
+    torsoPath.lineTo(cx + 8, 172);
+    
+    // Right hip
+    torsoPath.cubicTo(cx + 22, 172, cx + 28, 170, cx + 32, 165);
+    
+    // Right torso
+    torsoPath.cubicTo(cx + 34, 155, cx + 37, 145, cx + 38, 130);
+    torsoPath.cubicTo(cx + 40, 110, cx + 42, 90, cx + 42, 75);
+    
+    // Right shoulder
+    torsoPath.cubicTo(cx + 38, 68, cx + 20, 65, cx + 8, 60);
+    
+    torsoPath.close();
+    canvas.drawPath(torsoPath, fillPaint);
+    canvas.drawPath(torsoPath, outlinePaint);
 
-    // Torso
-    final torsoPath = Path()
-      ..moveTo(cx - 40, 72)
-      ..lineTo(cx - 36, 160)
-      ..moveTo(cx + 40, 72)
-      ..lineTo(cx + 36, 160);
-    canvas.drawPath(torsoPath, paint);
+    // Arms
+    _drawArm(canvas, cx - 42, 75, true, fillPaint, outlinePaint);  // Left arm
+    _drawArm(canvas, cx + 42, 75, false, fillPaint, outlinePaint); // Right arm
 
-    // Arms (left)
-    final leftArm = Path()
-      ..moveTo(cx - 40, 72)
-      ..lineTo(cx - 48, 140)
-      ..lineTo(cx - 44, 176);
-    canvas.drawPath(leftArm, paint);
+    // Legs
+    _drawLeg(canvas, cx - 18, 172, true, fillPaint, outlinePaint);  // Left leg
+    _drawLeg(canvas, cx + 18, 172, false, fillPaint, outlinePaint); // Right leg
+    
+    // Add subtle muscle definition lines (anatomical details)
+    if (isFront) {
+      _drawFrontDetails(canvas, cx, outlinePaint);
+    } else {
+      _drawBackDetails(canvas, cx, outlinePaint);
+    }
+  }
 
-    // Arms (right)
-    final rightArm = Path()
-      ..moveTo(cx + 40, 72)
-      ..lineTo(cx + 48, 140)
-      ..lineTo(cx + 44, 176);
-    canvas.drawPath(rightArm, paint);
+  void _drawArm(Canvas canvas, double startX, double startY, bool isLeft, Paint fillPaint, Paint outlinePaint) {
+    final sign = isLeft ? -1 : 1;
+    final armPath = Path();
+    
+    armPath.moveTo(startX, startY);
+    // Upper arm (shoulder to elbow)
+    armPath.cubicTo(
+      startX + sign * 4, startY + 25,
+      startX + sign * 6, startY + 50,
+      startX + sign * 4, startY + 68,
+    );
+    // Forearm (elbow to wrist)
+    armPath.cubicTo(
+      startX + sign * 2, startY + 85,
+      startX + sign * 0, startY + 95,
+      startX - sign * 2, startY + 104,
+    );
+    // Wrist to hand
+    armPath.lineTo(startX - sign * 4, startY + 106);
+    
+    // Return path (inner side)
+    armPath.lineTo(startX - sign * 2, startY + 104);
+    armPath.cubicTo(
+      startX + sign * 2, startY + 93,
+      startX + sign * 5, startY + 83,
+      startX + sign * 7, startY + 68,
+    );
+    armPath.cubicTo(
+      startX + sign * 8, startY + 50,
+      startX + sign * 6, startY + 25,
+      startX + sign * 3, startY,
+    );
+    armPath.close();
+    
+    canvas.drawPath(armPath, fillPaint);
+    canvas.drawPath(armPath, outlinePaint);
+  }
 
-    // Hips
-    canvas.drawLine(Offset(cx - 36, 160), Offset(cx, 170), paint);
-    canvas.drawLine(Offset(cx + 36, 160), Offset(cx, 170), paint);
+  void _drawLeg(Canvas canvas, double startX, double startY, bool isLeft, Paint fillPaint, Paint outlinePaint) {
+    final sign = isLeft ? -1 : 1;
+    final legPath = Path();
+    
+    legPath.moveTo(startX, startY);
+    // Thigh
+    legPath.cubicTo(
+      startX + sign * 8, startY + 30,
+      startX + sign * 10, startY + 60,
+      startX + sign * 8, startY + 88,
+    );
+    // Knee area
+    legPath.cubicTo(
+      startX + sign * 6, startY + 100,
+      startX + sign * 5, startY + 110,
+      startX + sign * 4, startY + 120,
+    );
+    // Calf
+    legPath.cubicTo(
+      startX + sign * 3, startY + 135,
+      startX + sign * 4, startY + 145,
+      startX + sign * 6, startY + 154,
+    );
+    // Ankle and foot
+    legPath.lineTo(startX + sign * 8, startY + 164);
+    
+    // Return path (inner side)
+    legPath.lineTo(startX + sign * 4, startY + 164);
+    legPath.cubicTo(
+      startX + sign * 2, startY + 145,
+      startX, startY + 135,
+      startX - sign * 1, startY + 120,
+    );
+    legPath.cubicTo(
+      startX - sign * 2, startY + 110,
+      startX - sign * 2, startY + 100,
+      startX, startY + 88,
+    );
+    legPath.cubicTo(
+      startX + sign * 2, startY + 60,
+      startX + sign * 3, startY + 30,
+      startX + sign * 2, startY,
+    );
+    legPath.close();
+    
+    canvas.drawPath(legPath, fillPaint);
+    canvas.drawPath(legPath, outlinePaint);
+  }
 
-    // Legs (left)
-    final leftLeg = Path()
-      ..moveTo(cx - 30, 164)
-      ..lineTo(cx - 26, 252)
-      ..lineTo(cx - 22, 310)
-      ..lineTo(cx - 30, 326);
-    canvas.drawPath(leftLeg, paint);
+  void _drawFrontDetails(Canvas canvas, double cx, Paint paint) {
+    final detailPaint = Paint()
+      ..color = AppColors.surfaceVariantDark.withOpacity(0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
 
-    // Legs (right)
-    final rightLeg = Path()
-      ..moveTo(cx + 30, 164)
-      ..lineTo(cx + 26, 252)
-      ..lineTo(cx + 22, 310)
-      ..lineTo(cx + 30, 326);
-    canvas.drawPath(rightLeg, paint);
+    // Abs definition
+    canvas.drawLine(Offset(cx, 118), Offset(cx, 160), detailPaint);
+    canvas.drawLine(Offset(cx - 12, 124), Offset(cx + 12, 124), detailPaint);
+    canvas.drawLine(Offset(cx - 14, 138), Offset(cx + 14, 138), detailPaint);
+    canvas.drawLine(Offset(cx - 12, 152), Offset(cx + 12, 152), detailPaint);
+    
+    // Chest definition
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(cx - 14, 92), width: 20, height: 16),
+      -0.5,
+      1.0,
+      false,
+      detailPaint,
+    );
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(cx + 14, 92), width: 20, height: 16),
+      2.6,
+      1.0,
+      false,
+      detailPaint,
+    );
+  }
 
-    // Inner legs
-    canvas.drawLine(Offset(cx - 8, 170), Offset(cx - 10, 252), paint);
-    canvas.drawLine(Offset(cx + 8, 170), Offset(cx + 10, 252), paint);
+  void _drawBackDetails(Canvas canvas, double cx, Paint paint) {
+    final detailPaint = Paint()
+      ..color = AppColors.surfaceVariantDark.withOpacity(0.2)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
 
-    // Feet
-    canvas.drawLine(Offset(cx - 30, 326), Offset(cx - 14, 336), paint);
-    canvas.drawLine(Offset(cx + 30, 326), Offset(cx + 14, 336), paint);
+    // Spine
+    canvas.drawLine(Offset(cx, 70), Offset(cx, 165), detailPaint);
+    
+    // Shoulder blades
+    final leftScapula = Path()
+      ..moveTo(cx - 18, 82)
+      ..cubicTo(cx - 22, 88, cx - 24, 96, cx - 22, 104)
+      ..cubicTo(cx - 20, 110, cx - 16, 112, cx - 10, 110);
+    canvas.drawPath(leftScapula, detailPaint);
+    
+    final rightScapula = Path()
+      ..moveTo(cx + 18, 82)
+      ..cubicTo(cx + 22, 88, cx + 24, 96, cx + 22, 104)
+      ..cubicTo(cx + 20, 110, cx + 16, 112, cx + 10, 110);
+    canvas.drawPath(rightScapula, detailPaint);
+    
+    // Lower back contour
+    canvas.drawArc(
+      Rect.fromCenter(center: Offset(cx, 140), width: 40, height: 24),
+      0,
+      3.14,
+      false,
+      detailPaint,
+    );
   }
 
   @override

@@ -28,12 +28,8 @@ mixin _$SetLog {
   int? get order => throw _privateConstructorUsedError;
   bool get isWarmUp => throw _privateConstructorUsedError;
 
-  /// Serializes this SetLog to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of SetLog
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $SetLogCopyWith<SetLog> get copyWith => throw _privateConstructorUsedError;
 }
 
@@ -62,8 +58,6 @@ class _$SetLogCopyWithImpl<$Res, $Val extends SetLog>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of SetLog
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -133,8 +127,6 @@ class __$$SetLogImplCopyWithImpl<$Res>
       _$SetLogImpl _value, $Res Function(_$SetLogImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of SetLog
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -232,14 +224,12 @@ class _$SetLogImpl implements _SetLog {
                 other.isWarmUp == isWarmUp));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, workoutLogExerciseId, weight,
       reps, exerciseDuration, order, isWarmUp);
 
-  /// Create a copy of SetLog
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$SetLogImplCopyWith<_$SetLogImpl> get copyWith =>
@@ -279,11 +269,8 @@ abstract class _SetLog implements SetLog {
   int? get order;
   @override
   bool get isWarmUp;
-
-  /// Create a copy of SetLog
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$SetLogImplCopyWith<_$SetLogImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

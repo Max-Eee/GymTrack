@@ -25,12 +25,8 @@ mixin _$WorkoutLogExercise {
   String get exerciseId => throw _privateConstructorUsedError;
   TrackingType get trackingType => throw _privateConstructorUsedError;
 
-  /// Serializes this WorkoutLogExercise to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of WorkoutLogExercise
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $WorkoutLogExerciseCopyWith<WorkoutLogExercise> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -58,8 +54,6 @@ class _$WorkoutLogExerciseCopyWithImpl<$Res, $Val extends WorkoutLogExercise>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of WorkoutLogExercise
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -112,8 +106,6 @@ class __$$WorkoutLogExerciseImplCopyWithImpl<$Res>
       $Res Function(_$WorkoutLogExerciseImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of WorkoutLogExercise
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -183,14 +175,12 @@ class _$WorkoutLogExerciseImpl implements _WorkoutLogExercise {
                 other.trackingType == trackingType));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode =>
       Object.hash(runtimeType, id, workoutLogId, exerciseId, trackingType);
 
-  /// Create a copy of WorkoutLogExercise
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$WorkoutLogExerciseImplCopyWith<_$WorkoutLogExerciseImpl> get copyWith =>
@@ -223,11 +213,8 @@ abstract class _WorkoutLogExercise implements WorkoutLogExercise {
   String get exerciseId;
   @override
   TrackingType get trackingType;
-
-  /// Create a copy of WorkoutLogExercise
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$WorkoutLogExerciseImplCopyWith<_$WorkoutLogExerciseImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

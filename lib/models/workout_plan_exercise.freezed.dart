@@ -29,12 +29,8 @@ mixin _$WorkoutPlanExercise {
   int? get order => throw _privateConstructorUsedError;
   TrackingType get trackingType => throw _privateConstructorUsedError;
 
-  /// Serializes this WorkoutPlanExercise to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of WorkoutPlanExercise
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $WorkoutPlanExerciseCopyWith<WorkoutPlanExercise> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -66,8 +62,6 @@ class _$WorkoutPlanExerciseCopyWithImpl<$Res, $Val extends WorkoutPlanExercise>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of WorkoutPlanExercise
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -144,8 +138,6 @@ class __$$WorkoutPlanExerciseImplCopyWithImpl<$Res>
       $Res Function(_$WorkoutPlanExerciseImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of WorkoutPlanExercise
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -252,14 +244,12 @@ class _$WorkoutPlanExerciseImpl implements _WorkoutPlanExercise {
                 other.trackingType == trackingType));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, workoutPlanId, exerciseId,
       sets, reps, exerciseDuration, order, trackingType);
 
-  /// Create a copy of WorkoutPlanExercise
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$WorkoutPlanExerciseImplCopyWith<_$WorkoutPlanExerciseImpl> get copyWith =>
@@ -304,11 +294,8 @@ abstract class _WorkoutPlanExercise implements WorkoutPlanExercise {
   int? get order;
   @override
   TrackingType get trackingType;
-
-  /// Create a copy of WorkoutPlanExercise
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$WorkoutPlanExerciseImplCopyWith<_$WorkoutPlanExerciseImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

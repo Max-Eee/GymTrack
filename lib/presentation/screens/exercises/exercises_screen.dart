@@ -22,7 +22,6 @@ class ExercisesScreen extends ConsumerStatefulWidget {
 }
 
 class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
-  bool _showFilters = false;
   final _searchController = TextEditingController();
   Timer? _debounce;
 
@@ -48,6 +47,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     count += ref.read(exerciseFilterMusclesProvider).length;
     if (ref.read(showOnlyFavoritesProvider)) count++;
     if (ref.read(showOnlyCustomProvider)) count++;
+    if (ref.read(showOnlyMyEquipmentProvider)) count++;
     return count;
   }
 
@@ -58,6 +58,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     ref.read(exerciseFilterMusclesProvider.notifier).state = [];
     ref.read(showOnlyFavoritesProvider.notifier).state = false;
     ref.read(showOnlyCustomProvider.notifier).state = false;
+    ref.read(showOnlyMyEquipmentProvider.notifier).state = false;
     ref.read(exerciseSearchQueryProvider.notifier).state = '';
     _searchController.clear();
   }
@@ -90,6 +91,18 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     );
   }
 
+  void _showFilterSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _FilterSheet(onClearAll: _clearAllFilters),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchQuery = ref.watch(exerciseSearchQueryProvider);
@@ -118,11 +131,15 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
     }
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onPrimary,
-        onPressed: () => _showCreateExerciseSheet(context),
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: FloatingActionButton(
+          heroTag: 'exercises_fab',
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          onPressed: () => _showCreateExerciseSheet(context),
+          child: const Icon(Icons.add),
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -141,7 +158,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
 
             // Search bar + filter toggle
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
               child: Row(
                 children: [
                   Expanded(child: _SearchBar(
@@ -150,44 +167,25 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
                   )),
                   const SizedBox(width: 10),
                   _FilterToggleButton(
-                    isActive: _showFilters,
+                    isActive: _activeFilterCount > 0,
                     activeCount: _activeFilterCount,
-                    onPressed: () =>
-                        setState(() => _showFilters = !_showFilters),
+                    onPressed: () => _showFilterSheet(context),
                   ),
                 ],
               ),
             ),
 
-            // Filter panel + exercise list share the same expanded space
+            // Exercise list
             Expanded(
-              child: Column(
-                children: [
-                  // Collapsible filter panel
-                  _FilterPanel(
-                    visible: _showFilters,
-                    selectedCategories: selectedCategories,
-                    selectedLevels: selectedLevels,
-                    selectedEquipment: selectedEquipment,
-                    selectedMuscles: selectedMuscles,
-                    showOnlyFavorites: showOnlyFavorites,
-                    onClearAll: hasFilters ? _clearAllFilters : null,
-                  ),
-
-                  // Exercise list
-                  Expanded(
-                    child: exercises.when(
-                      data: (list) {
-                        if (list.isEmpty) {
-                          return _EmptyState(hasFilters: hasSearchOrFilters);
-                        }
-                        return _ExerciseListView(exercises: list);
-                      },
-                      loading: () => const _ShimmerList(),
-                      error: (e, _) => _ErrorState(error: e),
-                    ),
-                  ),
-                ],
+              child: exercises.when(
+                data: (list) {
+                  if (list.isEmpty) {
+                    return _EmptyState(hasFilters: hasSearchOrFilters);
+                  }
+                  return _ExerciseListView(exercises: list);
+                },
+                loading: () => const _ShimmerList(),
+                error: (e, _) => _ErrorState(error: e),
               ),
             ),
           ],
@@ -318,203 +316,257 @@ class _FilterToggleButton extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Filter Panel (collapsible)
+// Filter Sheet (bottom sheet popup, scrollable)
 // ---------------------------------------------------------------------------
 
-class _FilterPanel extends ConsumerWidget {
-  const _FilterPanel({
-    required this.visible,
-    required this.selectedCategories,
-    required this.selectedLevels,
-    required this.selectedEquipment,
-    required this.selectedMuscles,
-    required this.showOnlyFavorites,
-    this.onClearAll,
-  });
-
-  final bool visible;
-  final List<CategoryType> selectedCategories;
-  final List<LevelType> selectedLevels;
-  final List<EquipmentType> selectedEquipment;
-  final List<Muscle> selectedMuscles;
-  final bool showOnlyFavorites;
+class _FilterSheet extends ConsumerWidget {
+  const _FilterSheet({this.onClearAll});
   final VoidCallback? onClearAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return AnimatedCrossFade(
-      duration: AppDurations.medium,
-      sizeCurve: Curves.easeInOut,
-      crossFadeState:
-          visible ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-      secondChild: const SizedBox.shrink(),
-      firstChild: Container(
-        margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceDark,
-          borderRadius: BorderRadius.circular(AppDimensions.borderRadiusMedium),
-          border: Border.all(color: AppColors.borderDark),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final selectedCategories = ref.watch(exerciseFilterCategoriesProvider);
+    final selectedLevels = ref.watch(exerciseFilterLevelsProvider);
+    final selectedEquipment = ref.watch(exerciseFilterEquipmentProvider);
+    final selectedMuscles = ref.watch(exerciseFilterMusclesProvider);
+    final showOnlyFavorites = ref.watch(showOnlyFavoritesProvider);
+    final showOnlyCustom = ref.watch(showOnlyCustomProvider);
+    final showOnlyMyEquipment = ref.watch(showOnlyMyEquipmentProvider);
+
+    final hasFilters = selectedCategories.isNotEmpty ||
+        selectedLevels.isNotEmpty ||
+        selectedEquipment.isNotEmpty ||
+        selectedMuscles.isNotEmpty ||
+        showOnlyFavorites ||
+        showOnlyCustom ||
+        showOnlyMyEquipment;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.65,
+      minChildSize: 0.35,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
           children: [
-            // Header row
-            Row(
-              children: [
-                const Icon(Icons.filter_list_rounded,
-                    color: AppColors.textSecondaryDark, size: 18),
-                const SizedBox(width: 6),
-                const Text(
-                  'Filters',
-                  style: TextStyle(
-                    color: AppColors.textSecondaryDark,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
+            // Handle bar
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                const Spacer(),
-                if (onClearAll != null)
-                  GestureDetector(
-                    onTap: onClearAll,
-                    child: const Text(
-                      'Clear all',
-                      style: TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.tune_rounded, color: AppColors.primary, size: 22),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Filters',
+                    style: TextStyle(
+                      color: AppColors.textPrimaryDark,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (hasFilters)
+                    GestureDetector(
+                      onTap: () {
+                        onClearAll?.call();
+                        Navigator.pop(context);
+                      },
+                      child: const Text(
+                        'Clear all',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-
-            // Favorites-only toggle
-            Row(
-              children: [
-                const Icon(Icons.star_rounded,
-                    color: AppColors.warning, size: 18),
-                const SizedBox(width: 6),
-                const Expanded(
-                  child: Text(
-                    'Favorites only',
-                    style: TextStyle(
-                      color: AppColors.textPrimaryDark,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+            Divider(height: 1, color: AppColors.surfaceVariantDark),
+            // Scrollable filter content
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Toggle switches
+                    _FilterToggleRow(
+                      icon: Icons.star_rounded,
+                      iconColor: AppColors.warning,
+                      label: 'Favorites only',
+                      value: showOnlyFavorites,
+                      onChanged: (v) => ref.read(showOnlyFavoritesProvider.notifier).state = v,
                     ),
-                  ),
-                ),
-                SizedBox(
-                  height: 28,
-                  child: Switch(
-                    value: showOnlyFavorites,
-                    activeColor: AppColors.primary,
-                    activeTrackColor: AppColors.primary.withOpacity(0.4),
-                    inactiveThumbColor: AppColors.textMutedDark,
-                    inactiveTrackColor: AppColors.surfaceVariantDark,
-                    trackOutlineColor: WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.selected)
-                          ? AppColors.primary.withOpacity(0.4)
-                          : AppColors.textMutedDark.withOpacity(0.5),
-                    ),
-                    onChanged: (v) => ref
-                        .read(showOnlyFavoritesProvider.notifier)
-                        .state = v,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Custom Only Toggle
-            Row(
-              children: [
-                const Icon(Icons.add_circle_outline, color: AppColors.primary, size: 20),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Custom Only',
-                    style: TextStyle(
-                      color: AppColors.textPrimaryDark,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Consumer(
-                  builder: (context, ref, _) {
-                    final showOnlyCustom = ref.watch(showOnlyCustomProvider);
-                    return Switch(
+                    const SizedBox(height: 8),
+                    _FilterToggleRow(
+                      icon: Icons.add_circle_outline,
+                      iconColor: AppColors.primary,
+                      label: 'Custom only',
                       value: showOnlyCustom,
-                      activeColor: AppColors.primary,
-                      inactiveThumbColor: AppColors.textSecondaryDark,
-                      activeTrackColor: AppColors.primary.withOpacity(0.5),
-                      inactiveTrackColor: AppColors.surfaceVariantDark,
-                      trackOutlineColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? AppColors.primary.withOpacity(0.4)
-                            : AppColors.textMutedDark.withOpacity(0.5),
-                      ),
-                      onChanged: (v) => ref
-                          .read(showOnlyCustomProvider.notifier)
-                          .state = v,
-                    );
-                  },
+                      onChanged: (v) => ref.read(showOnlyCustomProvider.notifier).state = v,
+                    ),
+                    const SizedBox(height: 8),
+                    _FilterToggleRow(
+                      icon: Icons.fitness_center_rounded,
+                      iconColor: AppColors.secondary,
+                      label: 'My equipment only',
+                      value: showOnlyMyEquipment,
+                      onChanged: (v) => ref.read(showOnlyMyEquipmentProvider.notifier).state = v,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Category
+                    _FilterSection<CategoryType>(
+                      label: 'Category',
+                      values: CategoryType.values,
+                      selected: selectedCategories,
+                      displayName: (v) => v.displayName,
+                      onChanged: (list) => ref
+                          .read(exerciseFilterCategoriesProvider.notifier)
+                          .state = list,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Muscle
+                    _FilterSection<Muscle>(
+                      label: 'Muscle',
+                      values: Muscle.values,
+                      selected: selectedMuscles,
+                      displayName: (v) => v.displayName,
+                      onChanged: (list) =>
+                          ref.read(exerciseFilterMusclesProvider.notifier).state = list,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Level
+                    _FilterSection<LevelType>(
+                      label: 'Level',
+                      values: LevelType.values,
+                      selected: selectedLevels,
+                      displayName: (v) =>
+                          v.name[0].toUpperCase() + v.name.substring(1),
+                      onChanged: (list) =>
+                          ref.read(exerciseFilterLevelsProvider.notifier).state = list,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Equipment
+                    _FilterSection<EquipmentType>(
+                      label: 'Equipment',
+                      values: EquipmentType.values,
+                      selected: selectedEquipment,
+                      displayName: (v) => v.displayName,
+                      onChanged: (list) => ref
+                          .read(exerciseFilterEquipmentProvider.notifier)
+                          .state = list,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 10),
-
-            // Category
-            _FilterSection<CategoryType>(
-              label: 'Category',
-              values: CategoryType.values,
-              selected: selectedCategories,
-              displayName: (v) => v.displayName,
-              onChanged: (list) => ref
-                  .read(exerciseFilterCategoriesProvider.notifier)
-                  .state = list,
-            ),
-            const SizedBox(height: 10),
-
-            // Muscle
-            _FilterSection<Muscle>(
-              label: 'Muscle',
-              values: Muscle.values,
-              selected: selectedMuscles,
-              displayName: (v) => v.displayName,
-              onChanged: (list) =>
-                  ref.read(exerciseFilterMusclesProvider.notifier).state = list,
-            ),
-            const SizedBox(height: 10),
-
-            // Level
-            _FilterSection<LevelType>(
-              label: 'Level',
-              values: LevelType.values,
-              selected: selectedLevels,
-              displayName: (v) =>
-                  v.name[0].toUpperCase() + v.name.substring(1),
-              onChanged: (list) =>
-                  ref.read(exerciseFilterLevelsProvider.notifier).state = list,
-            ),
-            const SizedBox(height: 10),
-
-            // Equipment
-            _FilterSection<EquipmentType>(
-              label: 'Equipment',
-              values: EquipmentType.values,
-              selected: selectedEquipment,
-              displayName: (v) => v.displayName,
-              onChanged: (list) => ref
-                  .read(exerciseFilterEquipmentProvider.notifier)
-                  .state = list,
-            ),
+            // Apply button
+            SafeArea(
+              top: false,
+              child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.onPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Apply Filters',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _FilterToggleRow extends StatelessWidget {
+  const _FilterToggleRow({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: value ? AppColors.primary.withOpacity(0.08) : AppColors.surfaceVariantDark.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: value ? AppColors.primary.withOpacity(0.3) : Colors.transparent,
         ),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: value ? AppColors.textPrimaryDark : AppColors.textSecondaryDark,
+                fontSize: 14,
+                fontWeight: value ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 28,
+            child: Switch(
+              value: value,
+              activeColor: AppColors.primary,
+              activeTrackColor: AppColors.primary.withOpacity(0.4),
+              inactiveThumbColor: AppColors.textMutedDark,
+              inactiveTrackColor: AppColors.surfaceVariantDark,
+              trackOutlineColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? AppColors.primary.withOpacity(0.4)
+                    : AppColors.textMutedDark.withOpacity(0.5),
+              ),
+              onChanged: onChanged,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1993,7 +2045,8 @@ class _CreateExerciseSheetState extends State<_CreateExerciseSheet> {
 
               // Save button
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                padding: EdgeInsets.fromLTRB(
+                    20, 8, 20, MediaQuery.of(context).padding.bottom + 20),
                 child: SizedBox(
                   width: double.infinity,
                   height: 50,

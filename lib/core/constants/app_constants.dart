@@ -22,6 +22,11 @@ class AppColors {
   // Warning - Yellow
   static const Color warning = Color(0xFFFFEA07);
 
+  // AI Feature Gradient Colors
+  static const Color aiPurple = Color(0xFF8B5CF6);
+  static const Color aiRed = Color(0xFFEF4444);
+  static const Color aiBlue = Color(0xFF3B82F6);
+
   // Dark Mode Colors (primary mode - matching web app)
   static const Color backgroundDark = Color(0xFF18181B); // zinc-900
   static const Color surfaceDark = Color(0xFF27272A); // zinc-800

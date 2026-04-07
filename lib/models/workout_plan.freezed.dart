@@ -28,12 +28,8 @@ mixin _$WorkoutPlan {
   bool get isSystemRoutine => throw _privateConstructorUsedError;
   String? get systemRoutineCategory => throw _privateConstructorUsedError;
 
-  /// Serializes this WorkoutPlan to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of WorkoutPlan
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $WorkoutPlanCopyWith<WorkoutPlan> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -64,8 +60,6 @@ class _$WorkoutPlanCopyWithImpl<$Res, $Val extends WorkoutPlan>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of WorkoutPlan
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -136,8 +130,6 @@ class __$$WorkoutPlanImplCopyWithImpl<$Res>
       _$WorkoutPlanImpl _value, $Res Function(_$WorkoutPlanImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of WorkoutPlan
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -236,14 +228,12 @@ class _$WorkoutPlanImpl implements _WorkoutPlan {
                 other.systemRoutineCategory == systemRoutineCategory));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, name, createdAt, updatedAt,
       notes, isSystemRoutine, systemRoutineCategory);
 
-  /// Create a copy of WorkoutPlan
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$WorkoutPlanImplCopyWith<_$WorkoutPlanImpl> get copyWith =>
@@ -284,11 +274,8 @@ abstract class _WorkoutPlan implements WorkoutPlan {
   bool get isSystemRoutine;
   @override
   String? get systemRoutineCategory;
-
-  /// Create a copy of WorkoutPlan
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$WorkoutPlanImplCopyWith<_$WorkoutPlanImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

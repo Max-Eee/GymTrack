@@ -149,6 +149,24 @@ class UserEquipments extends Table {
   Set<Column> get primaryKey => {equipmentType};
 }
 
+@DataClassName('FoodLogData')
+class FoodLogs extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  RealColumn get calories => real()();
+  RealColumn get proteinG => real()();
+  RealColumn get carbsG => real()();
+  RealColumn get fatG => real()();
+  RealColumn get fiberG => real().nullable()();
+  TextColumn get servingSize => text().nullable()();
+  TextColumn get imagePath => text().nullable()();
+  DateTimeColumn get loggedAt => dateTime()();
+  IntColumn get mealType => intEnum<MealType>()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 // Converters for list types
 class StringListConverter extends TypeConverter<List<String>, String> {
   const StringListConverter();

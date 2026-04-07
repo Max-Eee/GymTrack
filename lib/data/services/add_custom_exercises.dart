@@ -351,21 +351,21 @@ class CustomExerciseAdder {
         // Check against existing names
         if (existingNames.contains(normalizedName)) {
           skippedCount++;
-          print('○ Skipped (exists): $name');
+          // print('○ Skipped (exists): $name');
         } else {
           await _database.exerciseDao.insertExercise(exercise);
           addedCount++;
-          print('✓ Added: $name');
+          // print('✓ Added: $name');
         }
       } catch (e) {
         print('✗ Error adding exercise: $e');
       }
     }
 
-    print('\n=================================');
-    print('Added: $addedCount exercises');
-    print('Skipped: $skippedCount exercises');
-    print('=================================\n');
+    // print('\n=================================');
+    // print('Added: $addedCount exercises');
+    // print('Skipped: $skippedCount exercises');
+    // print('=================================\n');
   }
 
   ExercisesCompanion _createExercise({

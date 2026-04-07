@@ -69,6 +69,13 @@ enum GoalType {
   weight,
 }
 
+enum MealType {
+  breakfast,
+  lunch,
+  dinner,
+  snack,
+}
+
 extension CategoryTypeExtension on CategoryType {
   String get displayName {
     switch (this) {

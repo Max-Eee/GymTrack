@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../widgets/animated_ai_gradient.dart';
 import '../../../data/presets/preset_packs.dart';
 import '../../../models/preset_pack.dart';
 import 'pack_detail_screen.dart';
+import 'ai_generate_screen.dart';
 
 class PresetPacksScreen extends StatelessWidget {
   const PresetPacksScreen({super.key});
@@ -26,12 +28,18 @@ class PresetPacksScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: ListView.builder(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: presetPacks.length,
-        itemBuilder: (context, index) {
-          final pack = presetPacks[index];
-          return _PackCard(
+        children: [
+          // AI Workout Generator card
+          _AiGeneratorCard(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AiGenerateScreen()),
+            ),
+          ),
+          // Preset pack cards
+          ...presetPacks.map((pack) => _PackCard(
             pack: pack,
             onTap: () => Navigator.push(
               context,
@@ -39,8 +47,8 @@ class PresetPacksScreen extends StatelessWidget {
                 builder: (_) => PackDetailScreen(pack: pack),
               ),
             ),
-          );
-        },
+          )),
+        ],
       ),
     );
   }
@@ -158,6 +166,75 @@ class _InfoChip extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AiGeneratorCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AiGeneratorCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: AppColors.cardDark,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.borderDark, width: 1),
+            ),
+            child: Row(
+              children: [
+                AnimatedAiGradient(
+                  width: 56,
+                  height: 56,
+                  borderRadius: BorderRadius.circular(14),
+                  child: const Icon(Icons.auto_awesome_rounded,
+                      color: Colors.white, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'AI Workout Generator',
+                        style: TextStyle(
+                          color: AppColors.textPrimaryDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Describe your goals and get a custom workout split created by AI',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 13,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMutedDark,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

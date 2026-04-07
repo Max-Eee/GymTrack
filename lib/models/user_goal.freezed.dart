@@ -27,12 +27,8 @@ mixin _$UserGoal {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
 
-  /// Serializes this UserGoal to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of UserGoal
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $UserGoalCopyWith<UserGoal> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -61,8 +57,6 @@ class _$UserGoalCopyWithImpl<$Res, $Val extends UserGoal>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of UserGoal
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -127,8 +121,6 @@ class __$$UserGoalImplCopyWithImpl<$Res>
       _$UserGoalImpl _value, $Res Function(_$UserGoalImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of UserGoal
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -218,14 +210,12 @@ class _$UserGoalImpl implements _UserGoal {
                 other.updatedAt == updatedAt));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(
       runtimeType, id, exerciseId, goalType, goalValue, createdAt, updatedAt);
 
-  /// Create a copy of UserGoal
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$UserGoalImplCopyWith<_$UserGoalImpl> get copyWith =>
@@ -263,11 +253,8 @@ abstract class _UserGoal implements UserGoal {
   DateTime? get createdAt;
   @override
   DateTime? get updatedAt;
-
-  /// Create a copy of UserGoal
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$UserGoalImplCopyWith<_$UserGoalImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

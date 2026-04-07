@@ -28,12 +28,8 @@ mixin _$WorkoutLog {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get dateUpdated => throw _privateConstructorUsedError;
 
-  /// Serializes this WorkoutLog to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-
-  /// Create a copy of WorkoutLog
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   $WorkoutLogCopyWith<WorkoutLog> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -64,8 +60,6 @@ class _$WorkoutLogCopyWithImpl<$Res, $Val extends WorkoutLog>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
-  /// Create a copy of WorkoutLog
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -136,8 +130,6 @@ class __$$WorkoutLogImplCopyWithImpl<$Res>
       _$WorkoutLogImpl _value, $Res Function(_$WorkoutLogImpl) _then)
       : super(_value, _then);
 
-  /// Create a copy of WorkoutLog
-  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -237,14 +229,12 @@ class _$WorkoutLogImpl implements _WorkoutLog {
                 other.dateUpdated == dateUpdated));
   }
 
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   int get hashCode => Object.hash(runtimeType, id, workoutPlanId, date,
       duration, inProgress, createdAt, dateUpdated);
 
-  /// Create a copy of WorkoutLog
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   @override
   @pragma('vm:prefer-inline')
   _$$WorkoutLogImplCopyWith<_$WorkoutLogImpl> get copyWith =>
@@ -285,11 +275,8 @@ abstract class _WorkoutLog implements WorkoutLog {
   DateTime? get createdAt;
   @override
   DateTime? get dateUpdated;
-
-  /// Create a copy of WorkoutLog
-  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(includeFromJson: false, includeToJson: false)
+  @JsonKey(ignore: true)
   _$$WorkoutLogImplCopyWith<_$WorkoutLogImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

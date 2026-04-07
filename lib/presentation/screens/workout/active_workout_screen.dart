@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:record/record.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:drift/drift.dart' as drift;
 import 'package:uuid/uuid.dart';
 
@@ -11,9 +14,12 @@ import '../../../models/enums.dart';
 import '../../../models/voice_command.dart';
 import '../../../data/database/app_database.dart';
 import '../../../services/voice_command_service.dart';
+import '../../../services/gemma_model_service.dart';
+import '../settings/model_settings_screen.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
 import '../../providers/workout_providers.dart';
+import '../../widgets/animated_ai_gradient.dart';
 import '../../widgets/voice_confirmation_card.dart';
 
 // ---------------------------------------------------------------------------
@@ -96,8 +102,14 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   static const _uuid = Uuid();
 
   // Voice assistant state
-  final VoiceCommandService _voiceService = VoiceCommandService();
+  late final VoiceCommandService _voiceService;
   ParsedVoiceAction? _pendingAction;
+  bool _isRecording = false;
+  bool _isProcessingVoice = false;
+  int? _currentProcessingId;
+  AudioRecorder? _activeRecorder;
+  String? _activeAudioPath;
+  Directory? _activeTempDir;
 
   // -------------------------------------------------------------------------
   // Lifecycle
@@ -106,6 +118,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   @override
   void initState() {
     super.initState();
+    _voiceService = ref.read(voiceCommandServiceProvider);
     _startTimer();
   }
 
@@ -114,6 +127,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     _timer?.cancel();
     _restTimer?.cancel();
     _voiceService.dispose();
+    _activeRecorder?.dispose();
     for (final c in _controllers.values) {
       c.dispose();
     }
@@ -601,51 +615,186 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   // Voice Assistant
   // -------------------------------------------------------------------------
 
-  Future<void> _startVoiceListening() async {
-    await _voiceService.initialize();
+  void _onMicTap() {
+    final activeModel = ref.read(activeGemmaModelProvider);
+    if (activeModel == null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ModelSettingsScreen()),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Hold the mic button to record a voice command'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
 
-    // Launch native Android speech recognition dialog
-    final text = await _voiceService.recognizeSpeech(
-      prompt: 'Say a workout command',
+  Future<void> _onMicPressStart() async {
+    final activeModel = ref.read(activeGemmaModelProvider);
+    if (activeModel == null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ModelSettingsScreen()),
+      );
+      return;
+    }
+
+    final recorder = AudioRecorder();
+    if (!await recorder.hasPermission()) {
+      _showVoiceError('Microphone permission denied');
+      await recorder.dispose();
+      return;
+    }
+
+    final tempDir = await Directory.systemTemp.createTemp('voice_');
+    final audioPath = '${tempDir.path}/command.wav';
+
+    await recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.wav,
+        sampleRate: 16000,
+        numChannels: 1,
+        bitRate: 256000,
+      ),
+      path: audioPath,
     );
 
-    if (text == null || text.trim().isEmpty) {
-      // User cancelled or no speech detected
+    if (!mounted) return;
+    setState(() {
+      _isRecording = true;
+      _activeRecorder = recorder;
+      _activeAudioPath = audioPath;
+      _activeTempDir = tempDir;
+    });
+  }
+
+  Future<void> _onMicPressEnd() async {
+    if (!_isRecording || _activeRecorder == null) return;
+
+    final recorder = _activeRecorder!;
+    final audioPath = _activeAudioPath!;
+    final tempDir = _activeTempDir!;
+
+    setState(() => _isRecording = false);
+    _activeRecorder = null;
+    _activeAudioPath = null;
+    _activeTempDir = null;
+
+    await recorder.stop();
+    await recorder.dispose();
+
+    Uint8List? audioBytes;
+    final file = File(audioPath);
+    if (await file.exists()) {
+      audioBytes = await file.readAsBytes();
+      print('Recorded audio: ${audioBytes.length} bytes');
+    }
+
+    // Clean up temp files
+    try {
+      if (await file.exists()) await file.delete();
+      await tempDir.delete(recursive: true);
+    } catch (_) {}
+
+    if (audioBytes == null || audioBytes.isEmpty) return;
+    if (!mounted) return;
+    await _processVoiceAudio(audioBytes);
+  }
+
+  Future<void> _processVoiceAudio(Uint8List audioBytes) async {
+    // Build rich context with current set data
+    final exerciseContext = <String>[];
+    for (var i = 0; i < _exercises.length; i++) {
+      final ex = _exercises[i];
+      final sets = <String>[];
+      for (var j = 0; j < ex.sets.length; j++) {
+        final s = ex.sets[j];
+        final w = _ctrl('${i}_${j}_w').text;
+        final r = _ctrl('${i}_${j}_r').text;
+        final status = s.isCompleted ? '✓' : '○';
+        if (w.isNotEmpty || r.isNotEmpty) {
+          sets.add('Set${j + 1}:${w.isNotEmpty ? '${w}kg' : '-'}x${r.isNotEmpty ? r : '-'}$status');
+        } else {
+          sets.add('Set${j + 1}:empty$status');
+        }
+      }
+      exerciseContext.add('${ex.exerciseName}[${sets.join(',')}]');
+    }
+    
+    // Show processing indicator with stop button
+    if (!mounted) return;
+    final processingId = DateTime.now().millisecondsSinceEpoch;
+    _currentProcessingId = processingId;
+    setState(() => _isProcessingVoice = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 12),
+            Text('Processing voice command...'),
+          ],
+        ),
+        duration: const Duration(seconds: 120),
+        action: SnackBarAction(
+          label: 'Stop',
+          textColor: Colors.red,
+          onPressed: () {
+            _currentProcessingId = null;
+            setState(() => _isProcessingVoice = false);
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          },
+        ),
+      ),
+    );
+    
+    VoiceCommand? command;
+    try {
+      command = await _voiceService.parseCommandSmart(
+        '', // empty text — model will process audio directly
+        exerciseContext,
+        audioBytes: audioBytes,
+      );
+    } on PlatformException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        setState(() => _isProcessingVoice = false);
+      }
+      if (e.code == 'NOT_LOADED') {
+        _showVoiceError('Model is not loaded. Please activate a model in Settings first.');
+      } else if (e.code == 'NOT_ACTIVE') {
+        _showVoiceError('No model is active. Please activate a model in Settings.');
+      } else {
+        _showVoiceError('Model error: ${e.message}');
+      }
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      setState(() => _isProcessingVoice = false);
+    }
+    
+    // If user cancelled while processing, discard the result
+    if (_currentProcessingId != processingId) return;
+
+    if (command == null) {
+      _showVoiceError('Could not understand the voice command. Please try again.');
+      return;
+    }
+
+    final exercises = await ref.read(allExercisesProvider.future);
+    final action = _voiceService.resolve(command, exercises);
+    if (action == null) {
+      _showVoiceError('Exercise not found for audio command');
       return;
     }
 
     if (!mounted) return;
-    await _processVoiceInput(text);
-  }
-
-  Future<void> _processVoiceInput(String text) async {
-
-    VoiceCommand? command;
-
-    // Try Gemini Nano first (smart mode)
-    if (_voiceService.isSmartMode) {
-      final exerciseContext =
-          _exercises.map((e) => e.exerciseName).toList();
-      command = await _voiceService.parseCommandSmart(text, exerciseContext);
-    }
-
-    // Fallback to regex
-    command ??= _voiceService.parseCommand(text);
-
-    if (command == null) {
-      _showVoiceError('Could not understand: "$text"');
-      return;
-    }
-
-    // For remove/complete commands, try matching against current workout exercises first
-    final exercises = await ref.read(allExercisesProvider.future);
-    final action = _voiceService.resolve(command, exercises);
-    if (action == null) {
-      _showVoiceError('Exercise not found: "${command.exerciseName}"');
-      return;
-    }
-
-    setState(() => _pendingAction = action);
+    setState(() { _pendingAction = action; });
   }
 
   void _executeVoiceAction(ParsedVoiceAction action) {
@@ -660,13 +809,13 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         exId, exName, cmd.setCount, cmd.weightKg, cmd.reps,
       );
     } else if (cmd is UpdateSetCommand) {
-      _voiceUpdateLatestSet(exId, exName, cmd.weightKg, cmd.reps);
+      _voiceUpdateLatestSet(exId, exName, cmd.weightKg, cmd.reps, cmd.completed);
     } else if (cmd is RemoveExerciseCommand) {
       _voiceRemoveExercise(exId);
     } else if (cmd is AddSetToExerciseCommand) {
       _voiceAddSetsToExisting(exId, exName, cmd.setCount, cmd.weightKg, cmd.reps);
     } else if (cmd is UpdateSpecificSetCommand) {
-      _voiceUpdateSpecificSet(exId, cmd.setIndex, cmd.weightKg, cmd.reps);
+      _voiceUpdateSpecificSet(exId, cmd.setIndex, cmd.weightKg, cmd.reps, cmd.completed);
     } else if (cmd is CompleteExerciseCommand) {
       _voiceCompleteExercise(exId);
     }
@@ -745,7 +894,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
 
   void _voiceUpdateLatestSet(
-    String exId, String exName, double kg, int? reps,
+    String exId, String exName, double kg, int? reps, bool completed,
   ) {
     final existingIdx =
         _exercises.indexWhere((e) => e.exerciseId == exId);
@@ -774,6 +923,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
           kg == kg.roundToDouble() ? 0 : 1);
       if (reps != null) {
         _ctrl('${existingIdx}_${targetSet}_r').text = reps.toString();
+      }
+      if (completed) {
+        exercise.sets[targetSet].isCompleted = true;
       }
       setState(() {});
     } else {
@@ -822,7 +974,7 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
   }
 
   void _voiceUpdateSpecificSet(
-    String exId, int setIndex, double kg, int? reps,
+    String exId, int setIndex, double kg, int? reps, bool completed,
   ) {
     final idx = _exercises.indexWhere((e) => e.exerciseId == exId);
     if (idx < 0) {
@@ -840,6 +992,9 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
     }
     if (reps != null) {
       _ctrl('${idx}_${zeroIdx}_r').text = reps.toString();
+    }
+    if (completed) {
+      _exercises[idx].sets[zeroIdx].isCompleted = true;
     }
     setState(() {});
   }
@@ -1626,41 +1781,12 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
         children: [
           Row(
             children: [
-              // Info button
-              GestureDetector(
-                onTap: _showVoiceCommandHelp,
-                child: Container(
-                  width: 40,
-                  height: 52,
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.info_outline_rounded,
-                    color: AppColors.textSecondaryDark,
-                    size: 22,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
               // Finish button
               Expanded(
                 child: SizedBox(
                   height: 52,
-                  child: FilledButton.icon(
+                  child: FilledButton(
                     onPressed: _isSaving ? null : _finishWorkout,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: AppColors.onPrimary))
-                        : const Icon(Icons.check_circle_rounded, size: 22),
-                    label: Text(
-                      _isSaving ? 'Saving...' : 'Finish Workout',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.onPrimary,
@@ -1670,22 +1796,67 @@ class _ActiveWorkoutScreenState extends ConsumerState<ActiveWorkoutScreen> {
                             BorderRadius.circular(AppDimensions.borderRadiusMedium),
                       ),
                     ),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: AppColors.onPrimary))
+                        : Text(
+                            'Finish Workout',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-              // Mic button
+              // Mic button — hold to record
               GestureDetector(
-                onTap: _startVoiceListening,
+                onTap: _onMicTap,
+                onLongPressStart: (_) => _onMicPressStart(),
+                onLongPressEnd: (_) => _onMicPressEnd(),
+                child: _isRecording
+                    ? AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(AppDimensions.borderRadiusMedium),
+                          border: Border.all(color: Colors.red, width: 2.0),
+                        ),
+                        child: const Icon(Icons.mic, color: Colors.red, size: 26),
+                      )
+                    : AnimatedAiGradient(
+                        width: 52,
+                        height: 52,
+                        borderRadius: BorderRadius.circular(AppDimensions.borderRadiusMedium),
+                        child: const Icon(Icons.mic_rounded, color: Colors.white, size: 26),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              // Info button
+              GestureDetector(
+                onTap: _showVoiceCommandHelp,
                 child: Container(
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.12),
+                    color: AppColors.surfaceVariantDark,
                     borderRadius: BorderRadius.circular(AppDimensions.borderRadiusMedium),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 1.5),
+                    border: Border.all(
+                      color: AppColors.borderDark,
+                      width: 1,
+                    ),
                   ),
-                  child: const Icon(Icons.mic_rounded, color: AppColors.primary, size: 26),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    color: AppColors.textSecondaryDark,
+                    size: 22,
+                  ),
                 ),
               ),
             ],
@@ -1850,7 +2021,6 @@ class _VoiceCommandHelpSheet extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.textSecondaryDark,
                     fontSize: 13,
-                    fontStyle: FontStyle.italic,
                   ),
                 ),
               )),

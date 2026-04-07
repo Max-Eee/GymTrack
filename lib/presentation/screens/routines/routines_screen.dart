@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../widgets/animated_ai_gradient.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
@@ -26,11 +27,15 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.backgroundDark,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.onPrimary,
-        onPressed: () => _showCreateRoutineDialog(context),
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80),
+        child: FloatingActionButton(
+          heroTag: 'routines_fab',
+          backgroundColor: AppColors.primary,
+          foregroundColor: AppColors.onPrimary,
+          onPressed: () => _showCreateRoutineDialog(context),
+          child: const Icon(Icons.add),
+        ),
       ),
       body: SafeArea(
         child: workoutPlans.when(
@@ -73,14 +78,6 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
               letterSpacing: -0.5,
             ),
           ),
-          SizedBox(height: 4),
-          Text(
-            'Choose a routine to begin',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondaryDark,
-            ),
-          ),
         ],
       ),
     );
@@ -90,7 +87,8 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Material(
-        color: Colors.transparent,
+        color: AppColors.cardDark,
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: () => Navigator.push(
             context,
@@ -100,32 +98,21 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.primary.withOpacity(0.12),
-                  AppColors.secondary.withOpacity(0.08),
-                ],
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-              ),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: AppColors.primary.withOpacity(0.25),
+                color: AppColors.borderDark,
                 width: 1,
               ),
             ),
             child: Row(
               children: [
-                Container(
+                AnimatedAiGradient(
                   width: 42,
                   height: 42,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(11),
-                  ),
+                  borderRadius: BorderRadius.circular(11),
                   child: const Icon(
                     Icons.auto_awesome_rounded,
-                    color: AppColors.primary,
+                    color: Colors.white,
                     size: 22,
                   ),
                 ),
@@ -330,99 +317,146 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     final notesController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceDark,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.add_circle_outline_rounded,
-                color: AppColors.primary, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'New Routine',
-              style: TextStyle(
-                color: AppColors.textPrimaryDark,
-                fontWeight: FontWeight.w700,
-                fontSize: 20,
-              ),
-            ),
-          ],
-        ),
-        content: Form(
-          key: formKey,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
-                controller: nameController,
-                autofocus: true,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
-                decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
-                validator: (value) =>
-                    (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+              // Drag handle
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: notesController,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
-                decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
-                maxLines: 3,
+              // Title
+              const Text(
+                'New Routine',
+                style: TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Form
+              Form(
+                key: formKey,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Routine Name *',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: nameController,
+                        autofocus: true,
+                        style: const TextStyle(color: AppColors.textPrimaryDark),
+                        decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Notes',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: notesController,
+                        style: const TextStyle(color: AppColors.textPrimaryDark),
+                        decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
+                        maxLines: 3,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Create button
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20, 20, 20, MediaQuery.of(sheetContext).padding.bottom + 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final workoutRepo = ref.read(workoutRepositoryProvider);
+                      await workoutRepo.insertWorkoutPlan(
+                        WorkoutPlansCompanion.insert(
+                          id: const Uuid().v4(),
+                          name: nameController.text.trim(),
+                          notes: drift.Value(
+                            notesController.text.trim().isEmpty
+                                ? null
+                                : notesController.text.trim(),
+                          ),
+                          isSystemRoutine: const drift.Value(false),
+                        ),
+                      );
+                      if (sheetContext.mounted) {
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Routine created!'),
+                            backgroundColor: AppColors.surfaceVariantDark,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            margin: const EdgeInsets.all(16),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Create Routine',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondaryDark),
-            ),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              final workoutRepo = ref.read(workoutRepositoryProvider);
-              await workoutRepo.insertWorkoutPlan(
-                WorkoutPlansCompanion.insert(
-                  id: const Uuid().v4(),
-                  name: nameController.text.trim(),
-                  notes: drift.Value(
-                    notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
-                  ),
-                  isSystemRoutine: const drift.Value(false),
-                ),
-              );
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Routine created!'),
-                    backgroundColor: AppColors.surfaceVariantDark,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Create', style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -431,96 +465,144 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     final notesController = TextEditingController(text: plan.notes ?? '');
     final formKey = GlobalKey<FormState>();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surfaceDark,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.edit_rounded, color: AppColors.primary, size: 24),
-            SizedBox(width: 10),
-            Text(
-              'Edit Routine',
-              style: TextStyle(
-                color: AppColors.textPrimaryDark,
-                fontWeight: FontWeight.w700,
-                fontSize: 20,
-              ),
-            ),
-          ],
-        ),
-        content: Form(
-          key: formKey,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        final bottomInset = MediaQuery.of(sheetContext).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
-                controller: nameController,
-                autofocus: true,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
-                decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
-                validator: (value) =>
-                    (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+              // Drag handle
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: notesController,
-                style: const TextStyle(color: AppColors.textPrimaryDark),
-                decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
-                maxLines: 3,
+              // Title
+              const Text(
+                'Edit Routine',
+                style: TextStyle(
+                  color: AppColors.textPrimaryDark,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Form
+              Form(
+                key: formKey,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Routine Name *',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: nameController,
+                        autofocus: true,
+                        style: const TextStyle(color: AppColors.textPrimaryDark),
+                        decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
+                        validator: (value) =>
+                            (value == null || value.trim().isEmpty) ? 'Name is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Notes',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: notesController,
+                        style: const TextStyle(color: AppColors.textPrimaryDark),
+                        decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
+                        maxLines: 3,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Save button
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    20, 20, 20, MediaQuery.of(sheetContext).padding.bottom + 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final workoutRepo = ref.read(workoutRepositoryProvider);
+                      await workoutRepo.updateWorkoutPlan(
+                        plan.copyWith(
+                          name: nameController.text.trim(),
+                          notes: drift.Value(
+                            notesController.text.trim().isEmpty
+                                ? null
+                                : notesController.text.trim(),
+                          ),
+                        ),
+                      );
+                      if (sheetContext.mounted) {
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Routine updated!'),
+                            backgroundColor: AppColors.surfaceVariantDark,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            margin: const EdgeInsets.all(16),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: AppColors.onPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Save Changes',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondaryDark),
-            ),
-          ),
-          FilledButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              final workoutRepo = ref.read(workoutRepositoryProvider);
-              await workoutRepo.updateWorkoutPlan(
-                plan.copyWith(
-                  name: nameController.text.trim(),
-                  notes: drift.Value(
-                    notesController.text.trim().isEmpty
-                        ? null
-                        : notesController.text.trim(),
-                  ),
-                ),
-              );
-              if (dialogContext.mounted) {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Routine updated!'),
-                    backgroundColor: AppColors.surfaceVariantDark,
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    margin: const EdgeInsets.all(16),
-                  ),
-                );
-              }
-            },
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.onPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -774,7 +856,6 @@ class _RoutineCard extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondaryDark,
-                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ),
@@ -805,7 +886,6 @@ class _RoutineCard extends ConsumerWidget {
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textSecondaryDark,
-                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ),

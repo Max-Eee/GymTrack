@@ -13,7 +13,7 @@ class DatabaseSeedService {
     try {
       final existingExercises = await _database.exerciseDao.getAllExercises();
       if (existingExercises.isNotEmpty) {
-        print('Exercises already seeded (${existingExercises.length} found)');
+        // print('Exercises already seeded (${existingExercises.length} found)');
         return;
       }
 
@@ -58,10 +58,10 @@ class DatabaseSeedService {
         });
       }
 
-      print('Successfully seeded ${exerciseDataList.length} exercises');
+      // print('Successfully seeded ${exerciseDataList.length} exercises');
     } catch (e, stack) {
       print('Error seeding exercises: $e');
-      print('Stack: $stack');
+      // print('Stack: $stack');
       rethrow;
     }
   }

@@ -8,6 +8,7 @@ import 'tables/app_tables.dart';
 import 'daos/exercise_dao.dart';
 import 'daos/workout_dao.dart';
 import 'daos/user_dao.dart';
+import 'daos/food_log_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -24,18 +25,20 @@ part 'app_database.g.dart';
     UserGoals,
     UserInfos,
     UserEquipments,
+    FoodLogs,
   ],
   daos: [
     ExerciseDao,
     WorkoutDao,
     UserDao,
+    FoodLogDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -50,6 +53,9 @@ class AppDatabase extends _$AppDatabase {
         if (from < 3) {
           await m.addColumn(userInfos, userInfos.name);
           await m.addColumn(userInfos, userInfos.avatarPath);
+        }
+        if (from < 4) {
+          await m.createTable(foodLogs);
         }
       },
     );
