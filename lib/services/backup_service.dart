@@ -72,8 +72,11 @@ class BackupService extends StateNotifier<BackupState> {
   }
 
   Future<Directory> _getBackupDir() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final backupDir = Directory(p.join(appDir.path, _backupDirName));
+    // Use external storage so backups are accessible via file manager
+    // Falls back to internal documents dir if external is unavailable
+    final extDir = await getExternalStorageDirectory();
+    final baseDir = extDir ?? await getApplicationDocumentsDirectory();
+    final backupDir = Directory(p.join(baseDir.path, _backupDirName));
     if (!await backupDir.exists()) {
       await backupDir.create(recursive: true);
     }
@@ -178,19 +181,7 @@ class BackupService extends StateNotifier<BackupState> {
     dbFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
     final latestBackup = dbFiles.first;
 
-    // Also include avatar if exists
-    final avatarFiles = files
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.jpg'))
-        .toList();
-    avatarFiles.sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-
-    final filesToShare = <XFile>[XFile(latestBackup.path)];
-    if (avatarFiles.isNotEmpty) {
-      filesToShare.add(XFile(avatarFiles.first.path));
-    }
-
-    await Share.shareXFiles(filesToShare);
+    await Share.shareXFiles([XFile(latestBackup.path)]);
   }
 
   /// Restore from a backup file path
