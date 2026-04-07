@@ -388,7 +388,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gymtrack.gymTrack.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fit_forge_mobile";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/gym_track";
 			};
 			name = Debug;
 		};
@@ -402,7 +402,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gymtrack.gymTrack.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fit_forge_mobile";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/gym_track";
 			};
 			name = Release;
 		};
@@ -416,7 +416,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gymtrack.gymTrack.RunnerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/fit_forge_mobile";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/gym_track.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/gym_track";
 			};
 			name = Profile;
 		};
