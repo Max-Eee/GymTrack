@@ -34,6 +34,22 @@ This application is for fitness enthusiasts tracking workouts, managing custom e
 - **`AI Voice Assistant`** : Talk to your app to log sets effortlessly without typing.
 - **`Workout Chatbot`** : Discuss exercise tweaks and replacements with a built-in virtual fitness assistant.
 
+## 📸 Preview
+
+<div align="center">
+  <img src="screenshots/Screenshot_20260408-022832~2.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022845~2.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022858.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022907.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022917.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022926.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-022942.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-023000.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-023038.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-023100.png" width="30%" />
+  <img src="screenshots/Screenshot_20260408-023236.png" width="30%" />
+</div>
+
 ## ⬇️ Installation
 
 1. Clone or [Download](https://github.com/Max-Eee/gym-track/archive/refs/heads/main.zip) the repository.
