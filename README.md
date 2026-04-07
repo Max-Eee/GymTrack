@@ -1,5 +1,3 @@
-<img width="1500" height="500" alt="GymTrack Banner" src="assets/gymtrack_banner.png" />
-
 # <i>**`GymTrack`** Personal Fitness & AI Trainer</i>
 
 > **Offline-first Architecture** - 100% On-Device execution to ensure maximum privacy
