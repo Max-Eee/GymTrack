@@ -73,8 +73,28 @@ class PresetPackService {
 
     for (int i = 0; i < routine.exercises.length; i++) {
       final preset = routine.exercises[i];
-      final exerciseId = nameToId[preset.exerciseName.toLowerCase()];
-      if (exerciseId == null) continue; // Skip if exercise not found
+      var exerciseId = nameToId[preset.exerciseName.toLowerCase()];
+
+      // Auto-create exercise if it doesn't exist in the database
+      if (exerciseId == null) {
+        exerciseId = _uuid.v4();
+        await _exerciseRepo.insertExercise(
+          ExercisesCompanion.insert(
+            id: exerciseId,
+            name: preset.exerciseName,
+            aliases: const [],
+            primaryMuscles: const [],
+            secondaryMuscles: const [],
+            level: LevelType.beginner,
+            category: CategoryType.strength,
+            instructions: const [],
+            tips: const [],
+            isCustom: const drift.Value(true),
+            dateCreated: drift.Value(DateTime.now()),
+          ),
+        );
+        nameToId[preset.exerciseName.toLowerCase()] = exerciseId;
+      }
 
       await _workoutRepo.insertWorkoutPlanExercise(
         WorkoutPlanExercisesCompanion.insert(
