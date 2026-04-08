@@ -2,7 +2,7 @@
 
 > **Offline-first Architecture** - 100% On-Device execution to ensure maximum privacy
 
-This application is for fitness enthusiasts tracking workouts, managing custom exercises, and utilizing **`On-Device AI Models (Gemma)`**, **`Voice Commands`**, and `detailed statistical charts` for progressive overload.
+This application is for fitness enthusiasts tracking workouts, managing custom exercises, and utilizing **`On-Device AI Models (Gemma)`**, **`Voice Commands`**, `AI calorie Tracker` using `Image`, and generate routines with `Natural Language`.
 
 ### [**No subscriptions. No trackers. Just gains.**](#) 🏋️‍♂️
 
@@ -10,27 +10,8 @@ This application is for fitness enthusiasts tracking workouts, managing custom e
   
 > [!IMPORTANT]
 > **Privacy First**: No server required! All AI interactions, voice processing, and database syncing occur completely locally on your device.  
-> Supported AI Models: Local Gemma variants via LiteRT.
+> **Heavy Gemmqa 4 AI Models**: The on-device LLM functionality requires downloading large models for using AI features.  
 > 
-> **Want a hassle-free experience?** Simply compile the APK, load the app, and let our pre-supplied database seed handle all the heavy lifting!
-
-> [!WARNING]
-> **Heavy AI Models**: The on-device LLM functionality requires downloading large models upon initial activation.  
-> We recommend downloading these models while connected to a strong Wi-Fi network.
-
-## ✨ Features
-
-### Core Tracking Engine
-- **`Workout Sessions`** : Build, track, and save workouts with custom sets and rest timers.
-- **`Custom Exercises`** : Break free from restricted databases by logging your own variations.
-- **`Extensive Charts`** : Leverage detailed historical data visualization for progressive overload.
-- **`Offline Backup & Restore`** : Manually export your `.db` files or schedule simple daily auto-backups.
-
-### On-Device AI Features
-- **`Everything Runs Locally`** : Your workout data never leaves your device.
-- **`Gemma Integration`** : Powered by Google Gemma - download LiteRT models straight to the device!
-- **`AI Voice Assistant`** : Talk to your app to log sets effortlessly without typing.
-- **`Workout Chatbot`** : Discuss exercise tweaks and replacements with a built-in virtual fitness assistant.
 
 ## 📸 Preview
 
@@ -47,6 +28,21 @@ This application is for fitness enthusiasts tracking workouts, managing custom e
   <img src="screenshots/Screenshot_20260408-023100.png" width="30%" />
   <img src="screenshots/Screenshot_20260408-023236.png" width="30%" />
 </div>
+
+
+## ✨ Features
+
+### Core Tracking Engine
+- **`Workout Sessions`** : Build, track, and save workouts with custom sets and rest timers.
+- **`Custom Exercises`** : Break free from restricted databases by logging your own variations.
+- **`Extensive Charts`** : Leverage detailed historical data visualization for progressive overload.
+- **`Offline Backup & Restore`** : Manually export your `.db` files or schedule simple daily auto-backups.
+
+### On-Device AI Features
+- **`Everything Runs Locally`** : Your workout data never leaves your device.
+- **`Gemma Integration`** : Powered by Google Gemma - download LiteRT models straight to the device!
+- **`AI Voice Assistant`** : Talk to your app to log sets effortlessly without typing.
+- **`Workout Chatbot`** : Discuss exercise tweaks and replacements with a built-in virtual fitness assistant.
 
 ## ⬇️ Installation
 
