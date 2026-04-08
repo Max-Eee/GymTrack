@@ -9,7 +9,8 @@ This application is for fitness enthusiasts tracking workouts, managing custom e
 <samp>
   
 > [!IMPORTANT]
-> **Privacy First**: No server required! All AI interactions, voice processing, and database syncing occur completely locally on your device.  
+> **Privacy First**: No server required! All AI interactions, voice processing, and database syncing occur completely locally on your device.
+> 
 > **Heavy Gemmqa 4 AI Models**: The on-device LLM functionality requires downloading large models for using AI features.  
 > 
 
