@@ -81,7 +81,7 @@ class _ExercisesScreenState extends ConsumerState<ExercisesScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Text('Exercise created!'),
-                backgroundColor: AppColors.primary,
+                backgroundColor: AppColors.surfaceVariantDark,
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -1503,7 +1503,7 @@ void _confirmDeleteExercise(BuildContext context, WidgetRef ref, ExerciseData ex
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Deleted ${exercise.name}'),
-                  backgroundColor: AppColors.success,
+                  backgroundColor: AppColors.surfaceVariantDark,
                   duration: const Duration(seconds: 2),
                 ),
               );
@@ -1598,7 +1598,7 @@ class _EditExerciseSheetState extends ConsumerState<_EditExerciseSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Exercise updated'),
-          backgroundColor: AppColors.success,
+          backgroundColor: AppColors.surfaceVariantDark,
         ),
       );
     }

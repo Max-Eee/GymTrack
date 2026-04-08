@@ -20,7 +20,25 @@ class RoutinesScreen extends ConsumerStatefulWidget {
   ConsumerState<RoutinesScreen> createState() => _RoutinesScreenState();
 }
 
-class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
+class _RoutinesScreenState extends ConsumerState<RoutinesScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _staggerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _staggerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+  }
+
+  @override
+  void dispose() {
+    _staggerController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final workoutPlans = ref.watch(allWorkoutPlansProvider);
@@ -39,7 +57,13 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
       ),
       body: SafeArea(
         child: workoutPlans.when(
-          data: (plans) => _buildContent(plans),
+          data: (plans) {
+            // Trigger stagger animation when data arrives
+            if (_staggerController.status == AnimationStatus.dismissed) {
+              _staggerController.forward();
+            }
+            return _buildContent(plans);
+          },
           loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.primary),
           ),
@@ -51,25 +75,43 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
 
   Widget _buildContent(List<WorkoutPlanData> plans) {
     return CustomScrollView(
+      physics: plans.isEmpty
+          ? const NeverScrollableScrollPhysics()
+          : const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(child: _buildHeader()),
+        SliverToBoxAdapter(child: _buildHeader(plans.length)),
         SliverToBoxAdapter(child: _buildExplorePacksCard()),
         if (plans.isEmpty)
           SliverFillRemaining(child: _buildEmptyState())
-        else
-          _buildRoutineGrid(plans),
+        else ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Text(
+                'My Routines',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimaryDark.withOpacity(0.9),
+                  letterSpacing: -0.2,
+                ),
+              ),
+            ),
+          ),
+          _buildRoutineList(plans),
+        ],
         const SliverToBoxAdapter(child: SizedBox(height: 100)),
       ],
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(int count) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
+        children: [
+          const Text(
             'Start Workout',
             style: TextStyle(
               fontSize: 28,
@@ -78,6 +120,16 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
               letterSpacing: -0.5,
             ),
           ),
+          if (count > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$count routine${count == 1 ? '' : 's'}',
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryDark,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -161,15 +213,15 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 88,
+              height: 88,
               decoration: BoxDecoration(
                 color: AppColors.surfaceVariantDark,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(22),
               ),
               child: const Icon(
                 Icons.fitness_center_rounded,
-                size: 40,
+                size: 42,
                 color: AppColors.textSecondaryDark,
               ),
             ),
@@ -184,7 +236,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Create your first routine to start tracking\nyour workouts!',
+              'Create your first routine to start\ntracking your workouts',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -218,37 +270,56 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
     );
   }
 
-  Widget _buildRoutineGrid(List<WorkoutPlanData> plans) {
+  Widget _buildRoutineList(List<WorkoutPlanData> plans) {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 0.72,
-        ),
+      sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
-          (context, index) => _RoutineCard(
-            plan: plans[index],
-            onEdit: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => EditRoutineScreen(routineId: plans[index].id),
+          (context, index) {
+            final delay = (index * 0.12).clamp(0.0, 1.0);
+            final end = (delay + 0.5).clamp(0.0, 1.0);
+            final animation = CurvedAnimation(
+              parent: _staggerController,
+              curve: Interval(delay, end, curve: Curves.easeOutCubic),
+            );
+
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) => Transform.translate(
+                offset: Offset(0, 20 * (1 - animation.value)),
+                child: Opacity(
+                  opacity: animation.value,
+                  child: child,
                 ),
-              );
-            },
-            onDelete: () => _showDeleteConfirmation(context, plans[index]),
-            onStart: () => _onStartWorkout(context, plans[index]),
-            onAddExercises: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => AddExerciseSheet(workoutPlanId: plans[index].id),
-              );
-            },
-          ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _RoutineCard(
+                  plan: plans[index],
+                  onEdit: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            EditRoutineScreen(routineId: plans[index].id),
+                      ),
+                    );
+                  },
+                  onDelete: () =>
+                      _showDeleteConfirmation(context, plans[index]),
+                  onStart: () => _onStartWorkout(context, plans[index]),
+                  onAddExercises: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) =>
+                          AddExerciseSheet(workoutPlanId: plans[index].id),
+                    );
+                  },
+                ),
+              ),
+            );
+          },
           childCount: plans.length,
         ),
       ),
@@ -374,7 +445,24 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
                         controller: nameController,
                         autofocus: true,
                         style: const TextStyle(color: AppColors.textPrimaryDark),
-                        decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Push Day',
+                          hintStyle: TextStyle(color: AppColors.textSecondaryDark.withOpacity(0.5)),
+                          filled: true,
+                          fillColor: AppColors.backgroundDark,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                          ),
+                        ),
                         validator: (value) =>
                             (value == null || value.trim().isEmpty) ? 'Name is required' : null,
                       ),
@@ -391,7 +479,24 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
                       TextFormField(
                         controller: notesController,
                         style: const TextStyle(color: AppColors.textPrimaryDark),
-                        decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
+                        decoration: InputDecoration(
+                          hintText: 'Add any notes...',
+                          hintStyle: TextStyle(color: AppColors.textSecondaryDark.withOpacity(0.5)),
+                          filled: true,
+                          fillColor: AppColors.backgroundDark,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                          ),
+                        ),
                         maxLines: 3,
                       ),
                     ],
@@ -522,7 +627,24 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
                         controller: nameController,
                         autofocus: true,
                         style: const TextStyle(color: AppColors.textPrimaryDark),
-                        decoration: _inputDecoration('Routine Name', 'e.g., Push Day'),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Push Day',
+                          hintStyle: TextStyle(color: AppColors.textSecondaryDark.withOpacity(0.5)),
+                          filled: true,
+                          fillColor: AppColors.backgroundDark,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                          ),
+                        ),
                         validator: (value) =>
                             (value == null || value.trim().isEmpty) ? 'Name is required' : null,
                       ),
@@ -539,7 +661,24 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
                       TextFormField(
                         controller: notesController,
                         style: const TextStyle(color: AppColors.textPrimaryDark),
-                        decoration: _inputDecoration('Notes (optional)', 'Add any notes...'),
+                        decoration: InputDecoration(
+                          hintText: 'Add any notes...',
+                          hintStyle: TextStyle(color: AppColors.textSecondaryDark.withOpacity(0.5)),
+                          filled: true,
+                          fillColor: AppColors.backgroundDark,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: BorderSide(color: AppColors.surfaceVariantDark),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                          ),
+                        ),
                         maxLines: 3,
                       ),
                     ],
@@ -705,7 +844,7 @@ class _RoutinesScreenState extends ConsumerState<RoutinesScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Routine Card Widget
+// Routine Card Widget (Full-width with left accent)
 // ---------------------------------------------------------------------------
 class _RoutineCard extends ConsumerWidget {
   const _RoutineCard({
@@ -738,253 +877,318 @@ class _RoutineCard extends ConsumerWidget {
     final exercisesAsync = ref.watch(workoutPlanExercisesProvider(plan.id));
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppColors.surfaceDark,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppColors.surfaceVariantDark.withOpacity(0.5),
+          color: AppColors.borderDark,
           width: 1,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 4, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        plan.name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimaryDark,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Updated ${_timeAgo(plan.updatedAt)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondaryDark,
-                        ),
-                      ),
-                    ],
-                  ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            // Left accent strip
+            Container(
+              width: 3,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
                 ),
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert_rounded,
-                    color: AppColors.textSecondaryDark,
-                    size: 20,
-                  ),
-                  color: AppColors.surfaceVariantDark,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'add_exercises',
-                      child: Row(
-                        children: [
-                          Icon(Icons.add_rounded,
-                              size: 18, color: AppColors.primary),
-                          SizedBox(width: 10),
-                          Text('Add Exercises',
-                              style: TextStyle(color: AppColors.textPrimaryDark)),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_rounded,
-                              size: 18, color: AppColors.textPrimaryDark),
-                          SizedBox(width: 10),
-                          Text('Edit',
-                              style: TextStyle(color: AppColors.textPrimaryDark)),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline_rounded,
-                              size: 18, color: AppColors.danger),
-                          SizedBox(width: 10),
-                          Text('Delete',
-                              style: TextStyle(color: AppColors.danger)),
-                        ],
-                      ),
-                    ),
-                  ],
-                  onSelected: (value) {
-                    if (value == 'add_exercises') onAddExercises();
-                    if (value == 'edit') onEdit();
-                    if (value == 'delete') onDelete();
-                  },
-                ),
-              ],
+              ),
             ),
-          ),
-
-          const SizedBox(height: 4),
-          Divider(
-            color: AppColors.surfaceVariantDark.withOpacity(0.5),
-            height: 1,
-          ),
-
-          // Exercise List Preview
-          Expanded(
-            child: exercisesAsync.when(
-              data: (exercises) {
-                if (exercises.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 14),
-                      child: Text(
-                        'No exercises added',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondaryDark,
+            // Card content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: Title + menu + play button
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                plan.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimaryDark,
+                                  letterSpacing: -0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  // Exercise count badge
+                                  exercisesAsync.when(
+                                    data: (exercises) => Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${exercises.length} exercise${exercises.length == 1 ? '' : 's'}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    loading: () => const SizedBox.shrink(),
+                                    error: (_, __) => const SizedBox.shrink(),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Icon(
+                                    Icons.access_time_rounded,
+                                    size: 12,
+                                    color: AppColors.textMutedDark,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _timeAgo(plan.updatedAt),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textMutedDark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        // Popup menu
+                        SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_horiz_rounded,
+                              color: AppColors.textSecondaryDark,
+                              size: 20,
+                            ),
+                            padding: EdgeInsets.zero,
+                            color: AppColors.surfaceVariantDark,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'add_exercises',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.add_rounded,
+                                        size: 18, color: AppColors.primary),
+                                    SizedBox(width: 10),
+                                    Text('Add Exercises',
+                                        style: TextStyle(
+                                            color: AppColors.textPrimaryDark)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit_rounded,
+                                        size: 18,
+                                        color: AppColors.textPrimaryDark),
+                                    SizedBox(width: 10),
+                                    Text('Edit',
+                                        style: TextStyle(
+                                            color: AppColors.textPrimaryDark)),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline_rounded,
+                                        size: 18, color: AppColors.danger),
+                                    SizedBox(width: 10),
+                                    Text('Delete',
+                                        style:
+                                            TextStyle(color: AppColors.danger)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            onSelected: (value) {
+                              if (value == 'add_exercises') onAddExercises();
+                              if (value == 'edit') onEdit();
+                              if (value == 'delete') onDelete();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        // Play button
+                        Builder(builder: (_) {
+                          final hasExercises =
+                              exercisesAsync.valueOrNull?.isNotEmpty ?? false;
+                          return Material(
+                            color: hasExercises
+                                ? AppColors.primary
+                                : AppColors.surfaceVariantDark,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: hasExercises ? onStart : null,
+                              borderRadius: BorderRadius.circular(10),
+                              child: SizedBox(
+                                width: 42,
+                                height: 42,
+                                child: Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: hasExercises
+                                      ? AppColors.onPrimary
+                                      : AppColors.textMutedDark,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
-                  );
-                }
 
-                final displayExercises = exercises.length > 5
-                    ? exercises.sublist(0, 5)
-                    : exercises;
-                final remaining = exercises.length - displayExercises.length;
-
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ...displayExercises.map(
-                        (e) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: _ExerciseRow(exercise: e),
-                        ),
-                      ),
-                      if (remaining > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            '+$remaining more',
-                            style: const TextStyle(
-                              fontSize: 11,
+                    // Row 2: Exercise chips
+                    const SizedBox(height: 12),
+                    exercisesAsync.when(
+                      data: (exercises) {
+                        if (exercises.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Icon(Icons.info_outline_rounded,
+                                    size: 14, color: AppColors.textMutedDark),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'Tap menu to add exercises',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textMutedDark,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        return _ExerciseChips(exercises: exercises);
+                      },
+                      loading: () => const SizedBox(
+                        height: 28,
+                        child: Center(
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
                               color: AppColors.textSecondaryDark,
                             ),
                           ),
                         ),
-                    ],
-                  ),
-                );
-              },
-              loading: () => const Center(
-                child: SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.textSecondaryDark,
-                  ),
+                      ),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
+                  ],
                 ),
               ),
-              error: (_, __) => const Center(
-                child: Icon(Icons.error_outline,
-                    size: 16, color: AppColors.textSecondaryDark),
-              ),
             ),
-          ),
-
-          // Start Workout Button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: SizedBox(
-              width: double.infinity,
-              child: Builder(
-                builder: (_) {
-                  final hasExercises = exercisesAsync.valueOrNull?.isNotEmpty ?? false;
-                  return TextButton.icon(
-                    onPressed: hasExercises ? onStart : null,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: const Text(
-                      'Start Workout',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    style: TextButton.styleFrom(
-                      foregroundColor: hasExercises ? AppColors.primary : AppColors.textMutedDark,
-                      backgroundColor: hasExercises
-                          ? AppColors.primary.withOpacity(0.1)
-                          : AppColors.surfaceVariantDark.withOpacity(0.3),
-                      disabledForegroundColor: AppColors.textMutedDark,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Single Exercise Row (resolves exercise name from ID)
+// Exercise Chips (horizontal wrap of exercise names)
 // ---------------------------------------------------------------------------
-class _ExerciseRow extends ConsumerWidget {
-  const _ExerciseRow({required this.exercise});
+class _ExerciseChips extends ConsumerWidget {
+  const _ExerciseChips({required this.exercises});
+
+  final List<WorkoutPlanExerciseData> exercises;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final displayCount = exercises.length > 4 ? 4 : exercises.length;
+    final remaining = exercises.length - displayCount;
+    final displayExercises = exercises.sublist(0, displayCount);
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        ...displayExercises.map((e) => _ExerciseChip(exercise: e)),
+        if (remaining > 0)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceVariantDark.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '+$remaining more',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondaryDark,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single Exercise Chip (resolves name from ID)
+// ---------------------------------------------------------------------------
+class _ExerciseChip extends ConsumerWidget {
+  const _ExerciseChip({required this.exercise});
 
   final WorkoutPlanExerciseData exercise;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final exerciseAsync = ref.watch(exerciseProvider(exercise.exerciseId));
-
     final name = exerciseAsync.whenOrNull(data: (e) => e?.name) ?? '...';
 
-    return Row(
-      children: [
-        Container(
-          width: 4,
-          height: 4,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundDark,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.surfaceVariantDark.withOpacity(0.6),
+          width: 1,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '${exercise.sets} x $name',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondaryDark,
-              height: 1.3,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
+      ),
+      child: Text(
+        '${exercise.sets}×$name',
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textSecondaryDark,
         ),
-      ],
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }
+
+

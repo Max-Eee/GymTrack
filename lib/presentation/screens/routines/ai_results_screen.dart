@@ -158,7 +158,7 @@ class AiResultsScreen extends ConsumerWidget {
         content: Text(added > 0
             ? '$added routine${added > 1 ? 's' : ''} added to your workouts!'
             : 'All routines already exist.'),
-        backgroundColor: added > 0 ? AppColors.primary : AppColors.warning,
+        backgroundColor: AppColors.surfaceVariantDark,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -320,7 +320,7 @@ class _RoutineCard extends ConsumerWidget {
         content: Text(success
             ? '"${routine.name}" added!'
             : '"${routine.name}" already exists.'),
-        backgroundColor: success ? AppColors.primary : AppColors.warning,
+        backgroundColor: AppColors.surfaceVariantDark,
         behavior: SnackBarBehavior.floating,
       ),
     );

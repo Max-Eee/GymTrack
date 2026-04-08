@@ -61,7 +61,7 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Added $added routine${added == 1 ? '' : 's'}'),
-          backgroundColor: AppColors.success,
+          backgroundColor: AppColors.surfaceVariantDark,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -77,7 +77,7 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Added "${routine.name}" to your routines'),
-            backgroundColor: AppColors.success,
+            backgroundColor: AppColors.surfaceVariantDark,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -85,7 +85,7 @@ class _PackDetailScreenState extends ConsumerState<PackDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('"${routine.name}" already exists'),
-            backgroundColor: AppColors.warning,
+            backgroundColor: AppColors.surfaceVariantDark,
             behavior: SnackBarBehavior.floating,
           ),
         );

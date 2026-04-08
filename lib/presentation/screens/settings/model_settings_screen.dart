@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../services/gemma_models.dart';
 import '../../../services/gemma_model_service.dart';
 
@@ -166,7 +167,7 @@ class _ModelSettingsScreenState extends ConsumerState<ModelSettingsScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('${model.name} is now active. It will load automatically when you first use it.'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: AppColors.surfaceVariantDark,
                     duration: const Duration(seconds: 4),
                   ),
                 );

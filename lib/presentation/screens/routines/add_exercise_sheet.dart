@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' as drift;
@@ -7,6 +8,7 @@ import '../../../models/enums.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/exercise_providers.dart';
+import '../../../services/gemma_model_service.dart';
 
 class AddExerciseSheet extends ConsumerStatefulWidget {
   final String workoutPlanId;
@@ -26,6 +28,18 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   final Set<String> _selectedExerciseIds = {};
+
+  // Local filter state
+  List<CategoryType> _filterCategories = [];
+  List<Muscle> _filterMuscles = [];
+  List<LevelType> _filterLevels = [];
+  List<EquipmentType> _filterEquipment = [];
+
+  int get _activeFilterCount =>
+      _filterCategories.length +
+      _filterMuscles.length +
+      _filterLevels.length +
+      _filterEquipment.length;
 
   @override
   Widget build(BuildContext context) {
@@ -89,35 +103,95 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
             ),
           ),
 
-          // Search bar
+          // Search bar + filter button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search exercises...',
-                hintStyle: const TextStyle(color: AppColors.textMutedDark),
-                prefixIcon: const Icon(Icons.search,
-                    color: AppColors.textSecondaryDark),
-                filled: true,
-                fillColor: AppColors.surfaceVariantDark,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                    decoration: InputDecoration(
+                      hintText: 'Search exercises...',
+                      hintStyle: const TextStyle(color: AppColors.textMutedDark),
+                      prefixIcon: const Icon(Icons.search,
+                          color: AppColors.textSecondaryDark),
+                      filled: true,
+                      fillColor: AppColors.surfaceVariantDark,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear,
+                                  color: AppColors.textSecondaryDark),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                    ),
+                    style: const TextStyle(color: AppColors.textPrimaryDark),
+                  ),
                 ),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear,
-                            color: AppColors.textSecondaryDark),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-              ),
-              style: const TextStyle(color: AppColors.textPrimaryDark),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: _showFilterSheet,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: _activeFilterCount > 0
+                          ? AppColors.primary.withOpacity(0.15)
+                          : AppColors.surfaceVariantDark,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _activeFilterCount > 0
+                            ? AppColors.primary.withOpacity(0.3)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          color: _activeFilterCount > 0
+                              ? AppColors.primary
+                              : AppColors.textSecondaryDark,
+                          size: 22,
+                        ),
+                        if (_activeFilterCount > 0)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '$_activeFilterCount',
+                                  style: const TextStyle(
+                                    color: AppColors.onPrimary,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -126,12 +200,40 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
           Expanded(
             child: exercises.when(
               data: (exerciseList) {
-                final filtered = _searchQuery.isEmpty
-                    ? exerciseList
-                    : exerciseList
-                        .where((e) =>
-                            e.name.toLowerCase().contains(_searchQuery))
-                        .toList();
+                var filtered = exerciseList.toList();
+
+                // Apply local filters
+                if (_filterCategories.isNotEmpty) {
+                  filtered = filtered
+                      .where((e) => _filterCategories.contains(e.category))
+                      .toList();
+                }
+                if (_filterMuscles.isNotEmpty) {
+                  filtered = filtered
+                      .where((e) => e.primaryMuscles
+                          .any((m) => _filterMuscles.contains(m)))
+                      .toList();
+                }
+                if (_filterLevels.isNotEmpty) {
+                  filtered = filtered
+                      .where((e) => _filterLevels.contains(e.level))
+                      .toList();
+                }
+                if (_filterEquipment.isNotEmpty) {
+                  filtered = filtered
+                      .where((e) =>
+                          e.equipment != null &&
+                          _filterEquipment.contains(e.equipment))
+                      .toList();
+                }
+
+                // Apply search query
+                if (_searchQuery.isNotEmpty) {
+                  filtered = filtered
+                      .where((e) =>
+                          e.name.toLowerCase().contains(_searchQuery))
+                      .toList();
+                }
 
                 return ListView.builder(
                   itemCount: filtered.length,
@@ -265,6 +367,240 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
     );
   }
 
+  void _showFilterSheet() {
+    // Local copies declared outside builder so they persist across rebuilds
+    var cats = List<CategoryType>.from(_filterCategories);
+    var muscles = List<Muscle>.from(_filterMuscles);
+    var levels = List<LevelType>.from(_filterLevels);
+    var equipment = List<EquipmentType>.from(_filterEquipment);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final hasFilters = cats.isNotEmpty ||
+              muscles.isNotEmpty ||
+              levels.isNotEmpty ||
+              equipment.isNotEmpty;
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.65,
+            minChildSize: 0.35,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (context, scrollController) {
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceVariantDark,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.tune_rounded,
+                            color: AppColors.primary, size: 22),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Filters',
+                          style: TextStyle(
+                            color: AppColors.textPrimaryDark,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (hasFilters)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _filterCategories = [];
+                                _filterMuscles = [];
+                                _filterLevels = [];
+                                _filterEquipment = [];
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text(
+                              'Clear all',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: AppColors.surfaceVariantDark),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildChipSection<CategoryType>(
+                            label: 'Category',
+                            values: CategoryType.values,
+                            selected: cats,
+                            displayName: (v) => v.displayName,
+                            onChanged: (list) =>
+                                setSheetState(() => cats = list),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildChipSection<Muscle>(
+                            label: 'Muscle',
+                            values: Muscle.values,
+                            selected: muscles,
+                            displayName: (v) => v.displayName,
+                            onChanged: (list) =>
+                                setSheetState(() => muscles = list),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildChipSection<LevelType>(
+                            label: 'Level',
+                            values: LevelType.values,
+                            selected: levels,
+                            displayName: (v) =>
+                                v.name[0].toUpperCase() + v.name.substring(1),
+                            onChanged: (list) =>
+                                setSheetState(() => levels = list),
+                          ),
+                          const SizedBox(height: 16),
+                          _buildChipSection<EquipmentType>(
+                            label: 'Equipment',
+                            values: EquipmentType.values,
+                            selected: equipment,
+                            displayName: (v) => v.displayName,
+                            onChanged: (list) =>
+                                setSheetState(() => equipment = list),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _filterCategories = cats;
+                              _filterMuscles = muscles;
+                              _filterLevels = levels;
+                              _filterEquipment = equipment;
+                            });
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.onPrimary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'Apply Filters',
+                            style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildChipSection<T>({
+    required String label,
+    required List<T> values,
+    required List<T> selected,
+    required String Function(T) displayName,
+    required ValueChanged<List<T>> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textSecondaryDark,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: values.map((v) {
+            final isSelected = selected.contains(v);
+            return GestureDetector(
+              onTap: () {
+                final copy = List<T>.from(selected);
+                isSelected ? copy.remove(v) : copy.add(v);
+                onChanged(copy);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? AppColors.primary.withOpacity(0.15)
+                      : AppColors.surfaceVariantDark,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color:
+                        isSelected ? AppColors.primary : Colors.transparent,
+                    width: 1.2,
+                  ),
+                ),
+                child: Text(
+                  displayName(v),
+                  style: TextStyle(
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.textSecondaryDark,
+                    fontSize: 12,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
   void _showCreateCustomExercise() {
     final nameCtrl = TextEditingController();
     CategoryType category = CategoryType.strength;
@@ -274,6 +610,7 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
     ForceType? force;
     MechanicType? mechanic;
     final instructionsCtrl = TextEditingController();
+    bool isTagging = false;
 
     showModalBottomSheet(
       context: context,
@@ -321,6 +658,153 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      // AI Auto-Tag Button
+                      Builder(builder: (_) {
+                        final activeModel = ref.watch(activeGemmaModelProvider);
+                        if (activeModel == null) return const SizedBox.shrink();
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 40,
+                          child: OutlinedButton.icon(
+                            onPressed: isTagging ? null : () async {
+                              final name = nameCtrl.text.trim();
+                              if (name.isEmpty) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                  content: Text('Enter an exercise name first'),
+                                  backgroundColor: AppColors.surfaceVariantDark,
+                                  behavior: SnackBarBehavior.floating,
+                                ));
+                                return;
+                              }
+                              setSheetState(() => isTagging = true);
+                              try {
+                                final gemma = ref.read(gemmaModelServiceProvider);
+                                final muscleNames = Muscle.values.map((m) => m.displayName).join(', ');
+                                final categoryNames = CategoryType.values.map((c) => c.displayName).join(', ');
+                                final equipmentNames = EquipmentType.values.map((e) => e.displayName).join(', ');
+                                final result = await gemma.infer(
+                                  'Exercise: "$name"',
+                                  systemInstruction:
+                                    'You are a fitness expert. Given an exercise name, return ONLY a JSON object with these fields:\n'
+                                    '- "primaryMuscles": array of muscle names from: $muscleNames\n'
+                                    '- "category": one of: $categoryNames\n'
+                                    '- "equipment": one of: $equipmentNames, or null\n'
+                                    '- "force": one of: "Push", "Pull", "Static", or null\n'
+                                    '- "mechanic": one of: "Compound", "Isolation", or null\n'
+                                    '- "level": one of: "Beginner", "Intermediate", "Expert"\n'
+                                    'Reply ONLY with the JSON object, no extra text.',
+                                );
+                                // Parse JSON from response
+                                final jsonStr = result.contains('{')
+                                    ? result.substring(result.indexOf('{'), result.lastIndexOf('}') + 1)
+                                    : result;
+                                final Map<String, dynamic> parsed;
+                                try {
+                                  parsed = Map<String, dynamic>.from(
+                                    (await _parseJson(jsonStr)) ?? {},
+                                  );
+                                } catch (_) {
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                      content: Text('AI could not parse tags. Try again.'),
+                                      backgroundColor: AppColors.danger,
+                                      behavior: SnackBarBehavior.floating,
+                                    ));
+                                  }
+                                  return;
+                                }
+                                // Apply parsed values
+                                setSheetState(() {
+                                  // Primary muscles
+                                  if (parsed['primaryMuscles'] is List) {
+                                    selectedMuscles.clear();
+                                    for (final m in parsed['primaryMuscles']) {
+                                      final match = Muscle.values.cast<Muscle?>().firstWhere(
+                                        (v) => v!.displayName.toLowerCase() == m.toString().toLowerCase(),
+                                        orElse: () => null,
+                                      );
+                                      if (match != null) selectedMuscles.add(match);
+                                    }
+                                  }
+                                  // Category
+                                  if (parsed['category'] is String) {
+                                    final match = CategoryType.values.cast<CategoryType?>().firstWhere(
+                                      (v) => v!.displayName.toLowerCase() == parsed['category'].toString().toLowerCase(),
+                                      orElse: () => null,
+                                    );
+                                    if (match != null) category = match;
+                                  }
+                                  // Equipment
+                                  if (parsed['equipment'] is String) {
+                                    final match = EquipmentType.values.cast<EquipmentType?>().firstWhere(
+                                      (v) => v!.displayName.toLowerCase() == parsed['equipment'].toString().toLowerCase(),
+                                      orElse: () => null,
+                                    );
+                                    equipment = match;
+                                  }
+                                  // Force
+                                  if (parsed['force'] is String) {
+                                    final match = ForceType.values.cast<ForceType?>().firstWhere(
+                                      (v) => v!.displayName.toLowerCase() == parsed['force'].toString().toLowerCase(),
+                                      orElse: () => null,
+                                    );
+                                    force = match;
+                                  }
+                                  // Mechanic
+                                  if (parsed['mechanic'] is String) {
+                                    final match = MechanicType.values.cast<MechanicType?>().firstWhere(
+                                      (v) => v!.displayName.toLowerCase() == parsed['mechanic'].toString().toLowerCase(),
+                                      orElse: () => null,
+                                    );
+                                    mechanic = match;
+                                  }
+                                  // Level
+                                  if (parsed['level'] is String) {
+                                    final match = LevelType.values.cast<LevelType?>().firstWhere(
+                                      (v) => v!.displayName.toLowerCase() == parsed['level'].toString().toLowerCase(),
+                                      orElse: () => null,
+                                    );
+                                    if (match != null) level = match;
+                                  }
+                                });
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                    content: Text('Tagged ${selectedMuscles.length} muscle${selectedMuscles.length == 1 ? '' : 's'} + metadata'),
+                                    backgroundColor: AppColors.surfaceVariantDark,
+                                    behavior: SnackBarBehavior.floating,
+                                  ));
+                                }
+                              } catch (e) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                    content: Text('AI tagging failed: ${e.toString().length > 60 ? '${e.toString().substring(0, 60)}...' : e}'),
+                                    backgroundColor: AppColors.danger,
+                                    behavior: SnackBarBehavior.floating,
+                                  ));
+                                }
+                              } finally {
+                                if (ctx.mounted) setSheetState(() => isTagging = false);
+                              }
+                            },
+                            icon: isTagging
+                                ? const SizedBox(
+                                    width: 16, height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                  )
+                                : const Icon(Icons.auto_awesome_rounded, size: 16),
+                            label: Text(
+                              isTagging ? 'Tagging...' : 'AI Auto-Tag Muscles',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: BorderSide(color: AppColors.primary.withOpacity(0.4)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<CategoryType>(
                         value: category,
@@ -535,5 +1019,13 @@ class _AddExerciseSheetState extends ConsumerState<AddExerciseSheet> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<Map<String, dynamic>?> _parseJson(String raw) async {
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (_) {
+      return null;
+    }
   }
 }

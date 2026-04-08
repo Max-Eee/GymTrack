@@ -1490,7 +1490,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: const Text('Backup created successfully'),
-                                      backgroundColor: AppColors.success,
+                                      backgroundColor: AppColors.surfaceVariantDark,
                                       behavior: SnackBarBehavior.floating,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(10),
@@ -1681,7 +1681,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Backup restored. Please restart the app for changes to take effect.'),
-            backgroundColor: AppColors.success,
+            backgroundColor: AppColors.surfaceVariantDark,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
